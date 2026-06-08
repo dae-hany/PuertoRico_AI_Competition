@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environments
+.venv/
+venv/
+env/
+.conda/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Tournament outputs (generated)
+results/
+
+# Model weights: ignore everything except the bundled baseline checkpoint
+*.pt
+!training/checkpoints/ppo_baseline.pt
+
+# Local scratch
+_verify_*.py
+_scratch*.py

@@ -1,0 +1,9 @@
+# Core (engine, environment, tournament) — required
+numpy>=1.21
+gymnasium>=0.28
+pettingzoo>=1.24,<1.25      # env uses pettingzoo.utils.agent_selector.agent_selector
+trueskill>=0.4.5            # TrueSkill leaderboard metric
+
+# Reinforcement-learning baseline + training — optional
+# (only needed for agents/ppo_agent.py and training/train_ppo.py)
+torch>=1.13

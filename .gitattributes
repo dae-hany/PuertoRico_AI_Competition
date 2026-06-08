@@ -1,0 +1,5 @@
+# Normalise line endings to LF in the repository (cross-platform repo).
+* text=auto eol=lf
+
+# Treat model checkpoints as binary.
+*.pt binary
