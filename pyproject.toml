@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "puerto-rico-ai-competition"
+version = "0.1.0"
+description = "Puerto Rico as a reinforcement-learning / game-AI benchmark and competition."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy>=1.21",
+    "gymnasium>=0.28",
+    "pettingzoo>=1.24,<1.25",
+    "trueskill>=0.4.5",
+    "torch>=1.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = [
+    "puerto_rico",
+    "agents",
+    "tournament",
+    "tournament.rankers",
+    "training",
+]

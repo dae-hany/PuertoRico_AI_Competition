@@ -18,11 +18,16 @@ engine, the agents, the docs — is in English so anyone can take part.
 git clone <this-repo>
 cd PuertoRico_AI_Competition
 python -m venv .venv && . .venv/Scripts/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .                        # installs deps + makes the packages importable
 
 python examples/play_one_game.py        # one game between baseline agents
 python examples/run_tournament.py       # a round-robin + leaderboard
 ```
+
+`pip install -e .` is recommended (it makes `agents`, `tournament`, `puerto_rico`
+importable from anywhere). `pip install -r requirements.txt` also works — the
+example scripts add the repo root to the path themselves, but you should then run
+them from the repo root.
 
 ## Write an agent
 

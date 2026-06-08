@@ -7,6 +7,12 @@ written to results/leaderboard.{md,csv,json}. Add your own agent to `pool` to
 see how it stacks up. MCTS is included at a small simulation budget so the demo
 stays fast; raise `num_simulations` for a stronger (slower) opponent.
 """
+import os
+import sys
+
+# Make the repo root importable when run as a script from the examples/ folder.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent, RandomAgent,
                     ShippingRushAgent, TradeBuildingAgent)
 from tournament.leaderboard import save

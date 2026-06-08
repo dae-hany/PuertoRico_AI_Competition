@@ -9,7 +9,7 @@ and submit it. You only need to write one method: `act`.
 git clone <this-repo>
 cd PuertoRico_AI_Competition
 python -m venv .venv && . .venv/Scripts/activate     # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .                                     # deps + importable packages
 python examples/play_one_game.py                     # smoke test
 ```
 

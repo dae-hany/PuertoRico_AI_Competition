@@ -2,6 +2,12 @@
 
 Run from the repo root:  python examples/play_one_game.py
 """
+import os
+import sys
+
+# Make the repo root importable when run as a script from the examples/ folder.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from agents import ActionValueAgent, RandomAgent, ShippingRushAgent
 from tournament.match import play_game
 
