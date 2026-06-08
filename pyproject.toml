@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+webui = ["flask>=2.0"]
 
 [tool.setuptools]
 packages = [

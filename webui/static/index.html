@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puerto Rico Board Game - Playable Local Interface</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+      .player-setup-row .custom-spec { flex: 1; min-width: 150px; }
+      .setup-hint { font-size: 0.85rem; opacity: 0.75; margin: 4px 0 10px; }
+      .setup-hint code { background: rgba(127,127,127,0.18); padding: 1px 5px; border-radius: 4px; }
+      .last-ai-move { font-size: 0.85rem; opacity: 0.85; margin: 6px 0; min-height: 1.1em; }
+      .last-ai-move .lm-time { color: #4ea1ff; font-weight: 600; }
+      .last-ai-move.flagged { color: #ff6b6b; font-weight: 600; opacity: 1; }
+      .last-ai-move .lm-flag { color: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- SETUP SCREEN -->
+        <div id="setup-screen" class="screen card active">
+            <h1 class="glow-text">Puerto Rico</h1>
+            <p class="subtitle">
+                Play, watch bots, or debug your own agent — local simulator
+                <button type="button" class="btn btn-outline btn-small theme-toggle-btn" style="margin-left: 10px; vertical-align: middle;">🌓 Theme</button>
+            </p>
+            
+            <div class="setup-section">
+                <h3>1. Select Player Count</h3>
+                <div class="player-count-buttons">
+                    <button type="button" class="btn count-btn" data-count="2">2 Players</button>
+                    <button type="button" class="btn count-btn active" data-count="3">3 Players</button>
+                    <button type="button" class="btn count-btn" data-count="4">4 Players</button>
+                    <button type="button" class="btn count-btn" data-count="5">5 Players</button>
+                </div>
+            </div>
+
+            <div class="setup-section">
+                <h3>2. Configure Players</h3>
+                <p class="setup-hint">Each seat can be a human, a baseline, or your own agent — drop a file in <code>submissions/</code> (auto-listed) or type <code>module:Class</code> / <code>path/to/file.py:Class</code> in the box.</p>
+                <div class="player-setup-list" id="player-setup-list">
+                    <!-- Dynamic slots will be populated here -->
+                </div>
+            </div>
+
+            <button type="button" id="start-game-btn" class="btn btn-primary btn-large">Start Game</button>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="screen">
+            <!-- HEADER / GLOBAL STATS -->
+            <header class="game-header card">
+                <div class="header-left">
+                    <h2 class="logo glow-text">Puerto Rico</h2>
+                    <button type="button" class="btn btn-outline btn-small theme-toggle-btn" style="margin-left: 10px; vertical-align: middle;">🌓 Theme</button>
+                    <div class="info-badge font-outfit" id="round-number">Round: 1</div>
+                    <div class="info-badge font-outfit warning" id="phase-name">Phase: Role Selection</div>
+                </div>
+                <div class="header-right">
+                    <div class="resource-badge" title="Remaining VP Chips in Supply">
+                        <span class="emoji">🏆</span>
+                        <span class="label">VP Chips:</span>
+                        <span class="value" id="global-vp-chips">75</span>
+                    </div>
+                    <div class="resource-badge" title="Colonists on Ship">
+                        <span class="emoji">🚢</span>
+                        <span class="label">Colonist Ship:</span>
+                        <span class="value" id="global-colonist-ship">3</span>
+                    </div>
+                    <div class="resource-badge" title="Colonists in Supply Stack">
+                        <span class="emoji">👥</span>
+                        <span class="label">Colonist Supply:</span>
+                        <span class="value" id="global-colonist-supply">55</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- MAIN PLAYING CONTAINER -->
+            <div class="game-layout">
+                <!-- LEFT & CENTER BOARD: MARKET, ROLES, SHIPS -->
+                <main class="center-board">
+                    <!-- UPPER BOARD: PLANTATIONS, SHIPS, TRADING HOUSE -->
+                    <div class="board-top-grid">
+                        <!-- Role Cards Stack -->
+                        <section class="board-card card" id="roles-section">
+                            <h3 class="section-title">Available Roles</h3>
+                            <div class="roles-grid" id="roles-container">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </section>
+
+                        <!-- Plantations Pool -->
+                        <section class="board-card card" id="plantations-section">
+                            <h3 class="section-title">Plantations Market</h3>
+                            <div class="plantations-container">
+                                <div class="face-up-grid" id="face-up-plantations">
+                                    <!-- Rendered dynamically -->
+                                </div>
+                                <div class="quarry-stack-card" id="quarry-card">
+                                    <span class="emoji">🪨</span>
+                                    <div class="card-details">
+                                        <div class="name">Quarry Stack</div>
+                                        <div class="stock" id="quarry-stock">Quarries: 8</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Cargo Ships -->
+                        <section class="board-card card" id="ships-section">
+                            <h3 class="section-title">Cargo Ships</h3>
+                            <div class="ships-container" id="ships-container">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </section>
+
+                        <!-- Trading House -->
+                        <section class="board-card card" id="trading-section">
+                            <h3 class="section-title">Trading House</h3>
+                            <div class="trading-slots" id="trading-container">
+                                <!-- 4 fixed slots -->
+                                <div class="trade-slot empty" id="trade-0"></div>
+                                <div class="trade-slot empty" id="trade-1"></div>
+                                <div class="trade-slot empty" id="trade-2"></div>
+                                <div class="trade-slot empty" id="trade-3"></div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- LOWER BOARD: BUILDING SHOP -->
+                    <section class="board-card card" id="shop-section">
+                        <h3 class="section-title">Building Shop</h3>
+                        <div class="shop-grid" id="shop-container">
+                            <!-- Rendered dynamically grouped by cost columns -->
+                        </div>
+                    </section>
+                </main>
+
+                <!-- RIGHT COLUMN: PLAYERS' BOARDS & CONTROLS -->
+                <aside class="sidebar">
+                    <!-- PLAYER VIEWBOARDS CONTAINER -->
+                    <section class="player-boards card">
+                        <div class="tabs-header" id="player-tabs">
+                            <!-- Tab buttons for each player generated dynamically -->
+                        </div>
+                        <div class="player-board-content" id="active-player-board">
+                            <!-- Renders selected player's board (Grid of island/city) -->
+                            <h3 id="player-board-title" style="margin-bottom: 8px; font-size: 1.1rem; color: var(--text-primary); display: flex; align-items: center;">Player Board</h3>
+                            <div class="player-meta">
+                                <div class="meta-item accent-gold">
+                                    <span class="emoji">🪙</span>
+                                    <span class="val" id="player-doubloons">0</span>
+                                    <span class="lbl">Doubloons</span>
+                                </div>
+                                <div class="meta-item accent-purple">
+                                    <span class="emoji">🏆</span>
+                                    <span class="val" id="player-vp">0</span>
+                                    <span class="lbl">VP Chips</span>
+                                </div>
+                                <div class="meta-item accent-blue">
+                                    <span class="emoji">👥</span>
+                                    <span class="val" id="player-colonists">0</span>
+                                    <span class="lbl">Unplaced Colonists</span>
+                                </div>
+                            </div>
+
+                            <!-- Goods summary -->
+                            <div class="player-goods" id="player-goods-container">
+                                <!-- E.g. Corn: 1, Indigo: 2, etc. -->
+                            </div>
+
+                            <!-- Board grid split: Island on left, City on right -->
+                            <div class="board-grids">
+                                <div class="grid-container">
+                                    <h4 class="grid-title">Island Board (Plantations & Quarries)</h4>
+                                    <div class="board-grid island-grid" id="island-grid">
+                                        <!-- 12 slots -->
+                                    </div>
+                                </div>
+                                <div class="grid-container">
+                                    <h4 class="grid-title">City Board (Buildings)</h4>
+                                    <div class="board-grid city-grid" id="city-grid">
+                                        <!-- 12 slots -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- CONTROLS & EVENT LOGS -->
+                    <section class="game-console card">
+                        <h3 class="section-title">Control & Activity Console</h3>
+                        
+                        <div class="action-prompt" id="action-prompt">
+                            <!-- Instruction text telling what action is needed -->
+                            Waiting for game initialization...
+                        </div>
+
+                        <div id="last-ai-move" class="last-ai-move"></div>
+
+                        <div class="console-controls">
+                            <label class="toggle-container">
+                                <input type="checkbox" id="auto-ai-toggle" checked>
+                                <span class="checkmark"></span>
+                                <span class="text">Auto-run AI turns</span>
+                            </label>
+                            
+                            <button type="button" id="ai-step-btn" class="btn btn-secondary btn-small hidden">Run AI Step</button>
+                        </div>
+                        
+                        <div class="console-actions">
+                            <button type="button" id="undo-btn" class="btn btn-warning" disabled>Undo</button>
+                            <button type="button" id="pass-btn" class="btn btn-danger hidden">Pass Action</button>
+                            <button type="button" id="restart-btn" class="btn btn-outline">Restart</button>
+                        </div>
+
+                        <hr class="divider">
+
+                        <h4 class="log-title">Recent Event Log</h4>
+                        <div class="log-container" id="log-container">
+                            <!-- Dynamic logs in English -->
+                        </div>
+                    </section>
+                </aside>
+            </div>
+        </div>
+
+        <!-- GAME OVER MODAL -->
+        <div id="game-over-modal" class="modal-overlay">
+            <div class="modal-content card">
+                <h2 class="glow-text">Game Over</h2>
+                <p class="subtitle">Final Standings and VP Scores</p>
+                <div class="scoreboard-container">
+                    <table class="scoreboard-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th>Total VP</th>
+                                <th>Shipping VP</th>
+                                <th>Building VP</th>
+                                <th>Bonus VP</th>
+                                <th>Tie Breaker (Goods + Cash)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scoreboard-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" id="modal-close-btn" class="btn btn-primary">Start New Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script references -->
+    <script src="app.js"></script>
+</body>
+</html>

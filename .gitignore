@@ -23,6 +23,11 @@ results/
 *.pt
 !training/checkpoints/ppo_baseline.pt
 
+# Participants' local agents in the web UI (keep the example + readme)
+submissions/*.py
+!submissions/example_agent.py
+
 # Local scratch
 _verify_*.py
+_webtest.py
 _scratch*.py

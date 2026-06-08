@@ -7,3 +7,6 @@ trueskill>=0.4.5            # TrueSkill leaderboard metric
 # Reinforcement-learning baseline + training — optional
 # (only needed for agents/ppo_agent.py and training/train_ppo.py)
 torch>=1.13
+
+# Web debug UI — optional (webui/server.py)
+flask>=2.0

@@ -22,6 +22,7 @@ pip install -e .                        # installs deps + makes the packages imp
 
 python examples/play_one_game.py        # one game between baseline agents
 python examples/run_tournament.py       # a round-robin + leaderboard
+python webui/server.py                   # browser UI (needs flask): play / watch / debug
 ```
 
 `pip install -e .` is recommended (it makes `agents`, `tournament`, `puerto_rico`
@@ -68,8 +69,10 @@ puerto_rico/        core game engine + environment + forward model
 agents/             the Agent interface and all baseline agents
 tournament/         single-match harness, round-robin runner, rankers, leaderboard
 training/           optional PPO self-play trainer + a weak baseline checkpoint
+webui/              browser UI to play, watch, and debug agents
 examples/           play_one_game.py, run_tournament.py
-submission_template/ copy this to build your entry
+submission_template/ copy this to build your competition entry
+submissions/        drop an agent here to debug it in the web UI
 docs/               rules, observation/action encoding, ranking, submission guide
 tests/              pytest suite
 ```
