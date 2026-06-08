@@ -1,5 +1,8 @@
 from pettingzoo import AECEnv
-from pettingzoo.utils.agent_selector import agent_selector
+try:
+    from pettingzoo.utils.agent_selector import AgentSelector  # pettingzoo >= 1.24.4
+except ImportError:  # older pettingzoo only exposes the lowercase name
+    from pettingzoo.utils.agent_selector import agent_selector as AgentSelector
 from gymnasium import spaces
 import numpy as np
 
@@ -139,7 +142,7 @@ class PuertoRicoEnv(AECEnv):
         self._game_step_count = 0
 
         # Determine starting player based on engine
-        self._agent_selector = agent_selector(self.agents)
+        self._agent_selector = AgentSelector(self.agents)
         self.agent_selection = f"player_{self.game.current_player_idx}"
 
         # Populate initial info
