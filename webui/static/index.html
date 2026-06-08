@@ -17,6 +17,10 @@
       .last-ai-move .lm-time { color: #4ea1ff; font-weight: 600; }
       .last-ai-move.flagged { color: #ff6b6b; font-weight: 600; opacity: 1; }
       .last-ai-move .lm-flag { color: #ff6b6b; }
+      .has-info { position: relative; }
+      .building-info-icon { position: absolute; top: 1px; right: 2px; font-size: 0.6rem; opacity: 0.6; pointer-events: none; line-height: 1; text-shadow: 0 0 2px rgba(0,0,0,0.6); }
+      .building-tooltip { position: fixed; z-index: 9999; max-width: 240px; background: #1e2030; color: #f0f0f5; border: 1px solid #4ea1ff; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.4; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+      .building-tooltip.hidden { display: none; }
     </style>
 </head>
 <body>

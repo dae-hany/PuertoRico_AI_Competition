@@ -47,6 +47,77 @@ const ENUM_BUILDINGS = [
     "CUSTOMS_HOUSE", "CITY_HALL", "EMPTY", "OCCUPIED_SPACE"
 ];
 
+// --- Building ability help: hover popover (main) + ⓘ cue (secondary) ---
+// Descriptions match this implementation's engine (see puerto_rico/engine.py).
+const BUILDING_ABILITIES = {
+    SMALL_INDIGO_PLANT: "Produces Indigo. Needs 1 colonist working it plus Indigo plantation(s).",
+    SMALL_SUGAR_MILL: "Produces Sugar. Needs 1 colonist working it plus Sugar plantation(s).",
+    INDIGO_PLANT: "Produces up to 3 Indigo. Needs colonists plus Indigo plantations.",
+    SUGAR_MILL: "Produces up to 3 Sugar. Needs colonists plus Sugar plantations.",
+    TOBACCO_STORAGE: "Produces up to 3 Tobacco. Needs colonists plus Tobacco plantations.",
+    COFFEE_ROASTER: "Produces up to 2 Coffee. Needs colonists plus Coffee plantations.",
+    SMALL_MARKET: "Trader: +1 doubloon whenever you sell a good.",
+    HACIENDA: "Settler: you may also draw one extra random plantation from the stack.",
+    CONSTRUCTION_HUT: "Settler: you may take a Quarry instead of a plantation.",
+    SMALL_WAREHOUSE: "Captain: keep 1 type of good through the Captain phase (not forced onto ships).",
+    HOSPICE: "Settler: each new plantation/quarry you take arrives with a free colonist on it.",
+    OFFICE: "Trader: you may sell a good even if the same kind is already in the trading house.",
+    LARGE_MARKET: "Trader: +2 doubloons whenever you sell a good.",
+    LARGE_WAREHOUSE: "Captain: keep 2 types of good through the Captain phase.",
+    FACTORY: "Craftsman: bonus doubloons for producing many DIFFERENT goods — 2/3/4/5 kinds give 1/2/3/5 doubloons.",
+    UNIVERSITY: "Builder: each building you construct comes with a free colonist.",
+    HARBOR: "Captain: +1 victory point each time you ship goods.",
+    WHARF: "Captain: your own private ship (one good type, any amount), once per Captain phase.",
+    GUILDHALL: "End game (if staffed): +1 VP per small production building, +2 VP per large production building.",
+    RESIDENCE: "End game (if staffed): VP from filled island spaces — up to 9 → 4, 10 → 5, 11 → 6, 12 → 7 VP.",
+    FORTRESS: "End game (if staffed): +1 VP per 3 colonists you own.",
+    CUSTOMS_HOUSE: "End game (if staffed): +1 VP per 4 shipping VP (chips) you earned.",
+    CITY_HALL: "End game (if staffed): +1 VP per violet (purple) building you own.",
+};
+
+let _bldgTip = null;
+function _ensureBldgTip() {
+    if (!_bldgTip) {
+        _bldgTip = document.createElement("div");
+        _bldgTip.className = "building-tooltip hidden";
+        document.body.appendChild(_bldgTip);
+    }
+    return _bldgTip;
+}
+document.addEventListener("mouseover", (e) => {
+    const el = e.target.closest && e.target.closest("[data-ability]");
+    if (!el) return;
+    const tip = _ensureBldgTip();
+    tip.textContent = el.dataset.ability;
+    tip.classList.remove("hidden");
+});
+document.addEventListener("mouseout", (e) => {
+    const el = e.target.closest && e.target.closest("[data-ability]");
+    if (el && _bldgTip) _bldgTip.classList.add("hidden");
+});
+document.addEventListener("mousemove", (e) => {
+    if (!_bldgTip || _bldgTip.classList.contains("hidden")) return;
+    const pad = 14;
+    const r = _bldgTip.getBoundingClientRect();
+    let x = e.clientX + pad, y = e.clientY + pad;
+    if (x + r.width > window.innerWidth) x = e.clientX - r.width - pad;
+    if (y + r.height > window.innerHeight) y = e.clientY - r.height - pad;
+    _bldgTip.style.left = Math.max(4, x) + "px";
+    _bldgTip.style.top = Math.max(4, y) + "px";
+});
+
+// Attach the ability popover (and a small ⓘ cue) to a building element.
+function decorateBuilding(el, enumName) {
+    const text = BUILDING_ABILITIES[enumName];
+    if (!text) return;
+    el.dataset.ability = text;
+    el.classList.add("has-info");
+    const icon = document.createElement("span");
+    icon.className = "building-info-icon";
+    icon.textContent = "ⓘ";
+    el.appendChild(icon);
+}
+
 // App State
 let gameState = null;
 let selectedTabIdx = 0; // Index of the player board currently being viewed in tabs
@@ -613,7 +684,8 @@ function renderGame() {
                 item.classList.add("playable");
                 item.addEventListener("click", () => sendAction(actionIdx));
             }
-            
+
+            decorateBuilding(item, ENUM_BUILDINGS[b.id]);
             colEl.appendChild(item);
         });
     });
@@ -850,6 +922,8 @@ function renderSelectedPlayerBoard() {
                     slotEl.classList.add("playable");
                     slotEl.addEventListener("click", () => sendAction(actionIdx));
                 }
+
+                decorateBuilding(slotEl, b.building_type);
             } else {
                 slotEl.innerHTML = `<span style="color:var(--text-muted)">Empty</span>`;
             }
