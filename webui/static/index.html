@@ -21,6 +21,10 @@
       .building-info-icon { position: absolute; top: 1px; right: 2px; font-size: 0.6rem; opacity: 0.6; pointer-events: none; line-height: 1; text-shadow: 0 0 2px rgba(0,0,0,0.6); }
       .building-tooltip { position: fixed; z-index: 9999; max-width: 240px; background: #1e2030; color: #f0f0f5; border: 1px solid #4ea1ff; border-radius: 8px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.4; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
       .building-tooltip.hidden { display: none; }
+      .turn-indicator { display: inline-flex; align-items: center; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 0.95rem; padding: 4px 14px; border-radius: 999px; margin-left: 8px; white-space: nowrap; }
+      .turn-indicator.pulse { animation: turnPulse 0.55s ease; }
+      @keyframes turnPulse { 0% { transform: scale(0.9); opacity: 0.55; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+      .tab-btn.active-turn { box-shadow: 0 0 0 2px rgba(78,161,255,0.7); font-weight: 700; }
     </style>
 </head>
 <body>
@@ -63,6 +67,7 @@
                     <button type="button" class="btn btn-outline btn-small theme-toggle-btn" style="margin-left: 10px; vertical-align: middle;">🌓 Theme</button>
                     <div class="info-badge font-outfit" id="round-number">Round: 1</div>
                     <div class="info-badge font-outfit warning" id="phase-name">Phase: Role Selection</div>
+                    <div class="turn-indicator" id="turn-indicator">—</div>
                 </div>
                 <div class="header-right">
                     <div class="resource-badge" title="Remaining VP Chips in Supply">

@@ -125,6 +125,8 @@ let aiTimer = null;
 let humanPlayerIdx = 0; // Seat index of the (first) human player, for board focus
 let skipHaciendaThisTurn = false;
 let AGENT_OPTIONS = { builtin: [], submissions: [] };
+const PLAYER_COLORS = ["#4ea1ff", "#ff8a65", "#9ccc65", "#ba68c8", "#ffd54f"];
+let _lastTurnIdx = -1;
 
 // DOM Elements
 const setupScreen = document.getElementById("setup-screen");
@@ -303,6 +305,30 @@ function renderGame() {
     document.getElementById("global-vp-chips").innerText = gameState.vp_chips;
     document.getElementById("global-colonist-ship").innerText = gameState.colonists_ship;
     document.getElementById("global-colonist-supply").innerText = gameState.colonists_supply;
+
+    // Always-visible current-turn indicator in the header (color-coded, pulses on change)
+    const turnEl = document.getElementById("turn-indicator");
+    if (turnEl) {
+        if (gameState.game_over) {
+            turnEl.textContent = "Game Over";
+            turnEl.style.background = "#64748b";
+            turnEl.style.color = "#fff";
+        } else {
+            const ci = gameState.current_agent_idx;
+            const cp = gameState.players[ci];
+            const color = PLAYER_COLORS[ci % PLAYER_COLORS.length];
+            const who = cp.type === "human" ? "YOUR TURN" : cp.label.replace(/\s*\(.*\)$/, "");
+            turnEl.innerHTML = `▶ P${ci + 1} · ${who}`;
+            turnEl.style.background = color;
+            turnEl.style.color = "#10131a";
+            if (ci !== _lastTurnIdx) {
+                turnEl.classList.remove("pulse");
+                void turnEl.offsetWidth;   // restart the pulse animation
+                turnEl.classList.add("pulse");
+                _lastTurnIdx = ci;
+            }
+        }
+    }
     
     // 2. Undo Enable Status
     document.getElementById("undo-btn").disabled = gameState.game_over; // Let server validate stack depth
@@ -707,8 +733,9 @@ function renderGame() {
         // Distinguish human player and add Governor indicator
         const isGov = (idx === gameState.governor_idx);
         const govSuffix = isGov ? " 👑" : "";
-        const label = p.type === "human" ? "Human (P" + (idx+1) + ")" + govSuffix : "AI Bot (P" + (idx+1) + ")" + govSuffix;
-        btn.innerText = label;
+        const who = p.type === "human" ? "You" : p.label.replace(/\s*\(.*\)$/, "");
+        btn.innerText = `P${idx + 1} · ${who}${govSuffix}`;
+        btn.style.borderLeft = `4px solid ${PLAYER_COLORS[idx % PLAYER_COLORS.length]}`;
         if (isGov) {
             btn.title = "Governor of this round";
         }
