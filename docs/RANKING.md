@@ -102,5 +102,17 @@ react differently to limited data.
 
 ---
 
+## Reference defaults
+
+The bundled implementation ([`tournament/runner.py`](../tournament/runner.py)) uses
+these defaults, all adjustable by the organizer:
+
+- **Round-robin:** every group of 3 agents over all seatings, **1 game per
+  seating** by default (raise it for tighter confidence intervals).
+- **α-Rank:** ranking intensity **α = 1.0**, population size **m = 50**, with the
+  payoff matrix estimated from **4 games per ordered (s, r) pair**.
+
+---
+
 For full competition rules and submission requirements, see
 [COMPETITION_RULES.md](./COMPETITION_RULES.md).

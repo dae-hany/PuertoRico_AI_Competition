@@ -53,6 +53,15 @@ class MyAgent(Agent):
 - The organizer runs a **seat-balanced round-robin**, so turn-order / seating
   advantage is controlled — each agent plays each seating.
 
+## The official run
+
+- Your agent's opponents include the **baseline agents** bundled in this repo
+  (Random, Factory, TradeBuilding, ShippingRush, ActionValue, MCTS, PPO) plus the
+  other submissions.
+- The exact number of games per seating and the random seeds are set by the
+  organizer; the tournament is produced by the code in `tournament/` (see
+  [Ranking](RANKING.md) and `examples/run_tournament.py`).
+
 ## Ranking
 
 - The **official metric is win rate** over the round-robin (ties split equally),
@@ -69,7 +78,7 @@ class MyAgent(Agent):
   - access the network,
   - read or import other entrants' code,
   - spawn processes,
-  - read/write files outside its own folder, or
+  - read or write files, or do any other disk or network I/O, or
   - tamper with the environment, the engine, or other agents.
 - The `forward_model` provided to planning agents is for **read-only
   simulation** — **clone it, never mutate the live game**. Using it to corrupt

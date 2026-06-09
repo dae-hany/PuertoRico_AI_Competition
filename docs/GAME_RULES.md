@@ -42,44 +42,75 @@ The engine indexes roles **0–7**:
 
 Five goods, in the engine's index order:
 
-| # | Good | Notes |
-|---|------|-------|
-| 0 | Coffee | Higher value |
-| 1 | Tobacco | Higher value |
-| 2 | Corn | **Needs no production building** |
-| 3 | Sugar | Lower value |
-| 4 | Indigo | Lower value |
+| # | Good | Trading‑house price | How it is produced |
+|---|------|--------------------:|--------------------|
+| 0 | Coffee | **4** | Coffee Roaster + staffed Coffee plantation |
+| 1 | Tobacco | **3** | Tobacco Storage + staffed Tobacco plantation |
+| 2 | Corn | **0** | **No building needed** — a staffed Corn plantation produces Corn |
+| 3 | Sugar | **2** | (Small) Sugar Mill + staffed Sugar plantation |
+| 4 | Indigo | **1** | (Small) Indigo Plant + staffed Indigo plantation |
 
-Except for **Corn**, each good requires a **matching production building plus a
-staffed plantation** to produce. Roughly, Coffee/Tobacco are higher value and
-Corn/Indigo lower.
+The price column is exactly what the **Trader** receives when selling that good
+to the trading house (engine `GOOD_PRICES`). Except for **Corn**, a good is
+produced only when you have **both** a matching production building **and** a
+staffed plantation of that crop — both occupied by colonists.
 
 ## Buildings
 
 There are **23 building types** (engine `BuildingType` 0–22). A player's city has
-**12 building spaces**. Buildings include small/large production buildings (indigo,
-sugar, tobacco, coffee) and "violet" buildings with special powers, for example:
+**12 building spaces**. A building only grants its ability/VP while it is
+**staffed** (at least one colonist on it). Cost is in doubloons; *Cap* is how many
+colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
 
-- **Factory** — bonus doubloons for producing many *different* goods.
-- **Harbor** — extra VP per shipment.
-- **Wharf** — your own private one‑good ship.
-- **Office** — sell duplicate goods.
-- **Hospice** — free colonist when settling.
-- **University** — free colonist when building.
-- **Warehouse** — store goods past the Captain phase.
+**Production buildings** (turn staffed plantations into goods during Craftsman):
 
-### Large buildings
+| # | Building | Cost | VP | Cap | Produces |
+|---|----------|-----:|---:|----:|----------|
+| 0 | Small Indigo Plant | 1 | 1 | 1 | Indigo |
+| 1 | Small Sugar Mill | 2 | 1 | 1 | Sugar |
+| 2 | Indigo Plant | 3 | 2 | 3 | Indigo |
+| 3 | Sugar Mill | 4 | 2 | 3 | Sugar |
+| 4 | Tobacco Storage | 5 | 3 | 3 | Tobacco |
+| 5 | Coffee Roaster | 6 | 3 | 2 | Coffee |
 
-Five **large** buildings each cost **10**, are worth **4 VP**, and grant an
-end‑game bonus:
+**Violet (special‑power) buildings:**
 
-| Building | End‑game bonus |
-|----------|----------------|
-| Guildhall | VP per production building |
-| Residence | VP for many island tiles |
-| Fortress | VP per colonist |
-| Customs House | VP per shipped VP chip |
-| City Hall | VP per violet building |
+| # | Building | Cost | VP | Cap | Ability |
+|---|----------|-----:|---:|----:|---------|
+| 6 | Small Market | 1 | 1 | 1 | Trader: **+1** doubloon when you sell a good. |
+| 7 | Hacienda | 2 | 1 | 1 | Settler: you may also draw one **extra random plantation**. |
+| 8 | Construction Hut | 2 | 1 | 1 | Settler: you may take a **Quarry** instead of a plantation. |
+| 9 | Small Warehouse | 3 | 1 | 1 | Captain: **keep 1 type** of good through the Captain phase. |
+| 10 | Hospice | 4 | 2 | 1 | Settler: each new tile arrives with a **free colonist**. |
+| 11 | Office | 5 | 2 | 1 | Trader: sell a good **even if its kind is already** in the house. |
+| 12 | Large Market | 5 | 2 | 1 | Trader: **+2** doubloons when you sell a good. |
+| 13 | Large Warehouse | 6 | 2 | 1 | Captain: **keep 2 types** of good through the Captain phase. |
+| 14 | Factory | 7 | 3 | 1 | Craftsman: bonus doubloons for **different** goods produced — 2/3/4/5 kinds → **1/2/3/5**. |
+| 15 | University | 8 | 3 | 1 | Builder: each building you construct arrives with a **free colonist**. |
+| 16 | Harbor | 8 | 3 | 1 | Captain: **+1 VP** each time you ship goods. |
+| 17 | Wharf | 9 | 3 | 1 | Captain: your **own private ship** (one good type, any amount), once per Captain phase. |
+
+**Large buildings** — each costs **10**, is worth **4 VP**, capacity 1, and gives
+an **end‑game bonus** (only if staffed):
+
+| # | Building | End‑game bonus (exact) |
+|---|----------|------------------------|
+| 18 | Guildhall | **+1 VP** per small production building (Small Indigo/Sugar), **+2 VP** per large production building (Indigo Plant, Sugar Mill, Tobacco Storage, Coffee Roaster). |
+| 19 | Residence | VP by filled island spaces: **≤9 → 4, 10 → 5, 11 → 6, 12 → 7**. |
+| 20 | Fortress | **+1 VP** per **3** colonists you own (total, floored). |
+| 21 | Customs House | **+1 VP** per **4** shipping VP chips you earned (floored). |
+| 22 | City Hall | **+1 VP** per violet (non‑production) building you own. |
+
+### Money, colonists, and quarries
+
+- **Doubloons** are money (you start with 2). You spend them on buildings and gain
+  them from the Trader, Prospector, unpicked‑role bonuses, and the Factory.
+- **Colonists** are workers. The Mayor hands them out from the **colonist ship**,
+  which is refilled from the supply each round. A plantation or building does
+  nothing until a colonist is placed on it.
+- **Quarries** discount building purchases: when you build, each **staffed**
+  quarry lowers the price by **1 doubloon**, up to the building's printed VP value
+  (so a 4‑VP building can be discounted by at most 4).
 
 ## Shipping (Captain) details
 
