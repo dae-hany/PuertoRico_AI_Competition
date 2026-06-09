@@ -3,7 +3,7 @@
 Baseline opponents (strong → weak):
 
     MctsAgent           — Max^N UCT planning (strong, slow)
-    ActionValueAgent    — one-step lookahead heuristic (strong, fast)
+    ActionValueAgent    — greedy heuristic action scorer (strong, fast)
     ShippingRushAgent   — shipping-focused heuristic
     TradeBuildingAgent  — trade → building heuristic
     FactoryAgent        — Factory-engine heuristic

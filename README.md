@@ -55,7 +55,7 @@ Copy [`submission_template/`](submission_template/) to get started, then read th
 | Agent | Type | Strength |
 |---|---|---|
 | `MctsAgent` | Max^N UCT tree search | strong (slow) |
-| `ActionValueAgent` | one-step lookahead heuristic | strong |
+| `ActionValueAgent` | greedy heuristic — scores each legal action, plays the best | strong |
 | `ShippingRushAgent` | shipping-focused heuristic | strong |
 | `TradeBuildingAgent` | trade → building heuristic | moderate |
 | `FactoryAgent` | Factory-engine heuristic | weak |

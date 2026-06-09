@@ -75,7 +75,7 @@ from agents.action_value_agent import ActionValueAgent
 class TradeBuildingAgent(ActionValueAgent):
     """
     ActionValueAgent variant biased toward Trade→Building VP path.
-    Inherits proven one-step lookahead engine, only modifies heuristic weights.
+    Inherits the proven ActionValue heuristic scorer, only modifies heuristic weights.
     """
 
     name = "TradeBuilding"

@@ -15,11 +15,11 @@ class ActionValueAgent(Agent):
     Action-Value Heuristic Agent for Puerto Rico.
     
     For each legal action, computes base state heuristic plus action-specific
-    bonus using one-step lookahead evaluation. Designed as a strong baseline 
+    bonus estimated directly from the action's semantics (no simulation). Designed as a strong baseline 
     for PPO agent evaluation.
     
-    Strategy: Evaluates all legal actions by simulating them and computing
-    the resulting state value using a comprehensive heuristic function.
+    Strategy: scores every legal action with a comprehensive heuristic and
+    plays the highest-scoring one (greedy; the score is estimated, not simulated).
     """
     
     # ═══════════════════════════════════════════════════════════════════════════
@@ -143,7 +143,7 @@ class ActionValueAgent(Agent):
 
     def act(self, observation, action_mask):
         """
-        Select action using one-step lookahead heuristic evaluation.
+        Score every legal action with the heuristic and return the best one.
 
         Args:
             observation: Observation (not used - we access env directly)
@@ -926,7 +926,7 @@ class ActionValueAgent(Agent):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Simplified Lookahead Agent (Alternative: Pure State Evaluation)
+# Simplified variant (alternative pure state-evaluation heuristic)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ActionValueAgentSimple(ActionValueAgent):
