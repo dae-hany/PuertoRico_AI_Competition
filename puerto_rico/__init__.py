@@ -17,7 +17,8 @@ def make_env(seed=None, num_players: int = 3) -> PuertoRicoEnv:
     Args:
         seed: if given, the game setup is seeded for reproducibility; if None,
             a fresh random game is created.
-        num_players: number of players (the competition uses 3).
+        num_players: number of players — ``2`` for the 1-vs-1 track, ``3`` for
+            the 3p track (the engine also supports 4 and 5).
     """
     env = PuertoRicoEnv(num_players=num_players, random_seed_mode=True, fixed_seed=42)
     env.reset(seed=seed)

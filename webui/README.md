@@ -10,9 +10,12 @@ python webui/server.py         # open http://127.0.0.1:5000
 
 ## What you can do
 
-- **Configure each of the 3 seats** independently: a human (you), any baseline
-  (Random, Factory, TradeBuilding, ShippingRush, ActionValue, MCTS, PPO), or
-  **your own agent**.
+- **Pick the player count** (2–5). The competition tracks are **2 Players**
+  (1‑vs‑1) and **3 Players**; 4–5 are available for experimentation.
+- **Configure each seat** independently: a human (you), any baseline
+  (Random, Factory, TradeBuilding, ShippingRush, ActionValue, MCTS, or — in 3p —
+  PPO), or **your own agent**. The PPO baseline expects the 293-dim 3p
+  observation, so use it only with 3 players.
 - **Load your agent** two ways: drop a `.py` in [`../submissions/`](../submissions/)
   (auto-listed in the dropdown), or type `module:Class` / `path/to/file.py:Class`
   in a seat's box.

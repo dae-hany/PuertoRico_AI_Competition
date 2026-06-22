@@ -4,9 +4,26 @@ These rules govern the Puerto Rico AI competition. The **same rules** apply both
 to the IEEE CoG 2027 competition and to the university "Game AI" course final
 project.
 
+## Tracks
+
+The competition runs in **two independent tracks**, each ranked on its **own
+leaderboard**:
+
+| Track | Game | Seats | `observation` shape |
+|-------|------|------:|--------------------:|
+| **2p** | 1-vs-1 Puerto Rico | 2 | **(220,)** |
+| **3p** | 3-player Puerto Rico | 3 | **(293,)** |
+
+- A submission is **per track**: you enter the 2p track, the 3p track, or both,
+  and may submit a **different agent for each** (you can specialise for 1-vs-1 or
+  3-player). The two tracks never play against each other.
+- The **rules below apply to both tracks.** Only the seat count and the
+  observation length differ; the action space is the same `Discrete(200)`.
+
 ## Game format
 
-- Every match is a **single game of 3-player Puerto Rico** among 3 agents.
+- A 2p-track match is a **single game of 1-vs-1 Puerto Rico** between 2 agents;
+  a 3p-track match is a **single game of 3-player Puerto Rico** among 3 agents.
 - A **fresh instance** of your agent is created for each game, so do **not** rely
   on any state persisting across games.
 
@@ -27,9 +44,12 @@ class MyAgent(Agent):
 
 ## Inputs
 
-- `observation` — a `float32` NumPy array of shape **(293,)**.
-- `action_mask` — an `int` array of shape **(200,)**, where `1` marks a legal
-  action.
+- `observation` — a `float32` NumPy array. Its length is **track-dependent**:
+  **(220,)** in the 2p track, **(293,)** in the 3p track (it is
+  `74 + 73 × num_players`). Use `len(observation)` if you want one agent class to
+  handle both.
+- `action_mask` — an `int` array of shape **(200,)** in both tracks, where `1`
+  marks a legal action.
 - Encoding details are in `docs/OBSERVATION_AND_ACTIONS.md`.
 
 ## Per-move time limit
@@ -55,19 +75,25 @@ class MyAgent(Agent):
 
 ## The official run
 
-- Your agent's opponents include the **baseline agents** bundled in this repo
-  (Random, Factory, TradeBuilding, ShippingRush, ActionValue, MCTS, PPO) plus the
-  other submissions.
+- Each track is run **separately**. Within a track your agent's opponents
+  include the **baseline agents** bundled in this repo (Random, Factory,
+  TradeBuilding, ShippingRush, ActionValue, MCTS) plus the other submissions to
+  that track. The **PPO** baseline runs in the **3p track only** (its checkpoint
+  is 293-dim); the other baselines play both tracks.
 - The exact number of games per seating and the random seeds are set by the
-  organizer; the tournament is produced by the code in `tournament/` (see
-  [Ranking](RANKING.md) and `examples/run_tournament.py`).
+  organizer; the tournament is produced by the code in `tournament/` — the same
+  runner with `n_seats=2` or `n_seats=3` (see [Ranking](RANKING.md) and
+  `examples/run_tournament.py`).
 
 ## Ranking
 
-- The **official metric is win rate** over the round-robin (ties split equally),
-  reported with a **Wilson 95% confidence interval**.
-- Two secondary metrics are also published: **TrueSkill** rating and
-  **α-Rank**.
+- Metrics are computed **per track** (each track has its own leaderboard).
+- The **official metric is a skill rating matched to the track**: **Elo** in the
+  2p (1‑vs‑1) track, **TrueSkill** in the 3p track.
+- **Win rate** (ties split equally) with a **Wilson 95% confidence interval** is
+  reported **alongside** in both tracks.
+- **α-Rank** is available as **opt-in analysis** only — it is **not** part of the
+  standings.
 - Full explanation in `docs/RANKING.md`.
 
 ## Allowed code and dependencies

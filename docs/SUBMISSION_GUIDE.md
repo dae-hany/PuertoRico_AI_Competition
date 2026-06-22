@@ -1,7 +1,12 @@
 # Submission guide
 
-Build an agent that plays 3-player Puerto Rico, test it against the baselines,
-and submit it. You only need to write one method: `act`.
+Build an agent that plays Puerto Rico, test it against the baselines, and submit
+it. You only need to write one method: `act`.
+
+The competition has **two tracks** — **2p** (1‑vs‑1) and **3p** (3‑player) — and
+each is a **separate submission**. You can enter one or both, with a different
+agent per track if you like. The interface is the same in both tracks; the only
+difference your code sees is the **observation length** (220 in 2p, 293 in 3p).
 
 ## 1. Set up
 
@@ -26,8 +31,10 @@ class Agent:
     def act(self, observation, action_mask) -> int: ...    # required
 ```
 
-- `observation` — `float32` array, shape `(293,)` — the game state.
-- `action_mask` — `int` array, shape `(200,)` — `1` = legal. **Return a legal action.**
+- `observation` — `float32` array, shape `(220,)` in the 2p track or `(293,)` in
+  the 3p track — the game state. (`len(observation)` tells you which track.)
+- `action_mask` — `int` array, shape `(200,)` in both tracks — `1` = legal.
+  **Return a legal action.**
 
 What the numbers mean: [OBSERVATION_AND_ACTIONS.md](OBSERVATION_AND_ACTIONS.md).
 The game itself: [GAME_RULES.md](GAME_RULES.md).
@@ -57,17 +64,24 @@ The starter returns a random legal move — replace it with real logic.
 
 ## 4. Test against the baselines
 
+The seat count is just how many agents you pass to `play_game`:
+
 ```python
 from tournament.match import play_game
 from agents import ActionValueAgent, ShippingRushAgent
 from my_agent import MyAgent
 
+# 2p track — 1 vs 1
+result = play_game([MyAgent(), ActionValueAgent()], seed=0)
+print(result["scores"], "winner:", result["winners"])
+
+# 3p track — 3 players
 result = play_game([MyAgent(), ActionValueAgent(), ShippingRushAgent()], seed=0)
 print(result["scores"], "winner:", result["winners"])
 ```
 
 Or add `MyAgent` to the `pool` in [`examples/run_tournament.py`](../examples/run_tournament.py)
-and run it to see your win rate on the leaderboard.
+and run it to see your win rate on each track's leaderboard.
 
 **Baselines, strongest to weakest:** MCTS ≈ ActionValue ≈ ShippingRush (strong) >
 TradeBuilding (moderate) > Factory > PPO ≈ Random (weak). Beating the strong
@@ -84,16 +98,20 @@ heuristics and MCTS is the real challenge.
 
 ## 6. Rules you must respect
 
-3 players, **1 second per move**, always return a legal action. Going over the
-limit, returning an illegal action, or raising an exception forfeits that move to
-a random legal one. Full rules: [COMPETITION_RULES.md](COMPETITION_RULES.md).
+2 players (2p track) or 3 (3p track), **1 second per move**, always return a
+legal action. Going over the limit, returning an illegal action, or raising an
+exception forfeits that move to a random legal one. Full rules:
+[COMPETITION_RULES.md](COMPETITION_RULES.md).
 
 ## 7. Submit
 
-Submit your single agent file (the one class). Make sure it:
+Submit your single agent file (the one class) **per track you are entering** —
+the 2p track, the 3p track, or both (the same file is fine if your agent handles
+both observation lengths). Make sure it:
 
 - imports only from the standard library, NumPy, PyTorch, and this repo;
 - is self-contained and runs without network or file access;
-- sets a distinctive `name` (shown on the leaderboard).
+- sets a distinctive `name` (shown on the leaderboard);
+- states which track(s) it is for.
 
 Follow the channel and deadline given by your competition organizer.

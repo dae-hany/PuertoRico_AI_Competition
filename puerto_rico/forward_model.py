@@ -78,7 +78,7 @@ class ForwardModel:
         return [int(a) for a in np.where(self.action_mask() > 0.5)[0]]
 
     def observation(self) -> np.ndarray:
-        """Flattened 293-dim observation for the player to move."""
+        """Flattened observation for the player to move (220-dim in 2p, 293-dim in 3p)."""
         obs = self._env.observe(self._env.agent_selection)
         return flatten_observation(obs["observation"])
 

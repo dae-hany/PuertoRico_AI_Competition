@@ -1,10 +1,13 @@
 # Puerto Rico — rules for AI developers
 
 Puerto Rico is an economic strategy board game (designer: Andreas Seyfarth). This
-competition uses the **3‑player** variant; this repository is an independent
-re‑implementation built for research and education. This page gives you enough of
-the rules to reason about strategy — it is not a full rulebook. For the exact
-encoding your agent sees, read [OBSERVATION_AND_ACTIONS.md](OBSERVATION_AND_ACTIONS.md).
+competition runs in two tracks — **1‑vs‑1 (2‑player)** and **3‑player** — and this
+repository is an independent re‑implementation built for research and education.
+The rules below are **shared by both tracks**; the few differences (mostly setup
+quantities) are collected in [Setup by player count](#setup-by-player-count) at
+the end. This page gives you enough of the rules to reason about strategy — it is
+not a full rulebook. For the exact encoding your agent sees, read
+[OBSERVATION_AND_ACTIONS.md](OBSERVATION_AND_ACTIONS.md).
 
 ## Goal
 
@@ -26,7 +29,15 @@ turn order — but the player who *chose* it gets a small **privilege** (an extr
 good, a discount, or shipping priority). Any role left unpicked at the end of a
 round gains **one doubloon**, making it more attractive next round.
 
-The engine indexes roles **0–7**:
+How many roles are on the table and picked each round depends on the track:
+
+- **3p track:** 6 role tiles (Settler … Captain, no Prospector). Each of the 3
+  players picks one per round (3 picked, 3 left to gain doubloons).
+- **2p track:** a 7th tile — a single **Prospector** (gain 1 doubloon, no shared
+  action) — is added. The two players **alternate** picking until **6 of the 7**
+  are taken (3 each), leaving 1 tile unpicked to gain a doubloon.
+
+The engine indexes roles **0–7** (Prospector‑2 only appears with 5 players):
 
 | # | Role | Action (all players) | Chooser's privilege |
 |---|------|----------------------|---------------------|
@@ -128,15 +139,30 @@ The current round finishes and the game ends when **any** of these occurs:
 
 Highest total VP wins; ties broken by leftover doubloons + goods.
 
-## 3‑player setup constants
+## Setup by player count
 
-| Constant | Value |
-|----------|-------|
-| VP chips | 75 |
-| Colonists in supply | 55 |
-| Colonist ship capacity | 3 |
-| Starting doubloons (each) | 2 |
-| Cargo ship capacities | 4 / 5 / 6 |
+The two tracks share every rule above; they differ only in setup **quantities**.
+
+| Constant | 2p (1‑vs‑1) | 3p |
+|----------|------------:|---:|
+| VP chips | 65 | 75 |
+| Colonists in supply | 40 | 55 |
+| Colonist ship capacity | 2 | 3 |
+| Starting doubloons (each) | 3 | 2 |
+| Cargo ships | 4 / 6 (two ships) | 4 / 5 / 6 |
+| Quarries available | 5 | 8 |
+| Face‑up plantations each Settler round | 3 | 4 |
+| Initial plantations | governor Indigo, other Corn | governor + 2nd Indigo, 3rd Corn |
+| Role tiles on the table | 7 (one Prospector); 6 picked/round | 6; 3 picked/round |
+
+**2p plantation supply** is each crop's 3‑player count **minus 3** (Coffee 5,
+Tobacco 6, Corn 7, Sugar 8, Indigo 9).
+
+**2p building supply is tighter** — there is exactly **one of each violet and
+large building** (so in 1‑vs‑1 only one player can ever own the Factory, Wharf,
+each large building, etc.), and **two of each production building**. (In 3p the
+counts are the *Max Count* values implied by the building tables above: small
+production ×4, large production ×3, small violet ×2, large ×1.)
 
 ## Further reading
 

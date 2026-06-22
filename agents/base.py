@@ -46,7 +46,9 @@ class Agent:
         """Choose one legal action for the current state.
 
         Args:
-            observation: float32 vector of shape (293,) — the game state.
+            observation: float32 vector of the game state. Its length depends on
+                the track — (220,) in the 2p / 1-vs-1 track, (293,) in the 3p
+                track; ``len(observation)`` tells you which.
             action_mask: int vector of shape (200,); ``mask[a] == 1`` iff action
                 ``a`` is legal. You must return an action with ``mask[a] == 1``.
 

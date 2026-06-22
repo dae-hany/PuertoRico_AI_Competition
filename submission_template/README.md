@@ -14,23 +14,27 @@ Your entry is a single Python class that implements `act`.
    from agents import ActionValueAgent, RandomAgent
    from submission_template.my_agent import MyAgent
 
-   result = play_game([MyAgent(), ActionValueAgent(), RandomAgent()], seed=0)
+   # 2p track — 1 vs 1 (pass 2 agents); 3p track — pass 3 agents
+   result = play_game([MyAgent(), ActionValueAgent()], seed=0)
    print(result["scores"], result["winners"])
    ```
 
    Or add `MyAgent` to the `pool` in `examples/run_tournament.py` and run it to
-   see your win rate on the leaderboard.
+   see your win rate on each track's leaderboard.
 
 ## Rules in one line
 
-3 players, **1 second per move** (wall-clock), you must return a legal action.
-Going over the time limit or returning an illegal action forfeits that move to a
-random legal one. Full details: [`../docs/COMPETITION_RULES.md`](../docs/COMPETITION_RULES.md).
+2 players (2p track) or 3 (3p track), **1 second per move** (wall-clock), you
+must return a legal action. Going over the time limit or returning an illegal
+action forfeits that move to a random legal one. Full details:
+[`../docs/COMPETITION_RULES.md`](../docs/COMPETITION_RULES.md).
 
 ## What the inputs mean
 
-- `observation` — a 293-dim float vector describing the full game state.
-- `action_mask` — a 200-dim 0/1 vector of which actions are currently legal.
+- `observation` — a float vector describing the full game state; **220-dim in the
+  2p track, 293-dim in the 3p track** (`len(observation)` tells you which).
+- `action_mask` — a 200-dim 0/1 vector of which actions are currently legal
+  (same in both tracks).
 
 The field-by-field layout is in
 [`../docs/OBSERVATION_AND_ACTIONS.md`](../docs/OBSERVATION_AND_ACTIONS.md).

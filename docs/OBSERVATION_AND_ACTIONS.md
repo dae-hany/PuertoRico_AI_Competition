@@ -2,9 +2,15 @@
 
 Your agent's `act(observation, action_mask)` receives two NumPy arrays:
 
-- `observation` — `float32`, shape **(293,)** — the full game state.
-- `action_mask` — `int8`, shape **(200,)** — `action_mask[a] == 1` iff action `a`
-  is currently legal. **You must return an `a` with `action_mask[a] == 1`.**
+- `observation` — `float32`, shape **track-dependent**: **(220,)** in the 2p
+  track, **(293,)** in the 3p track (`74 + 73 × num_players`) — the full game
+  state.
+- `action_mask` — `int8`, shape **(200,)** in **both** tracks — `action_mask[a]
+  == 1` iff action `a` is currently legal. **You must return an `a` with
+  `action_mask[a] == 1`.**
+
+The action space below is identical in both tracks; only the number of per-player
+blocks in the observation changes.
 
 ```python
 import numpy as np
@@ -44,16 +50,23 @@ authoritative source of legality.
 
 ---
 
-## Observation vector (293 dims)
+## Observation vector (220 dims in 2p, 293 dims in 3p)
 
-The vector is four concatenated blocks:
+The vector is one global block followed by one block **per player**:
 
 ```
-[ global (74) | player_0 (73) | player_1 (73) | player_2 (73) ]
-   offset 0       offset 74       offset 147      offset 220
+3p (293):  [ global (74) | player_0 (73) | player_1 (73) | player_2 (73) ]
+              offset 0       offset 74       offset 147      offset 220
+
+2p (220):  [ global (74) | player_0 (73) | player_1 (73) ]
+              offset 0       offset 74       offset 147
 ```
 
-The per‑player blocks are **absolute** (player_0/1/2), not ego‑centric. On your
+So the global block (offsets 0–73) and the `player_0` / `player_1` blocks sit at
+the **same offsets** in both tracks; the 3p track simply adds a third
+`player_2` block. The general length is `74 + 73 × num_players`.
+
+The per‑player blocks are **absolute** (player_0/1/…), not ego‑centric. On your
 turn, the global `current_player` field (offset 36) tells you which block is you.
 
 ### Global block — offsets 0–73

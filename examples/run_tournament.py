@@ -1,11 +1,18 @@
-"""Run a small round-robin tournament between the baselines and print the board.
+"""Run a small round-robin tournament for each track and print the boards.
 
 Run from the repo root:  python examples/run_tournament.py
 
-The leaderboard (Win% official, plus TrueSkill and α-Rank) is printed and also
-written to results/leaderboard.{md,csv,json}. Add your own agent to `pool` to
-see how it stacks up. MCTS is included at a small simulation budget so the demo
-stays fast; raise `num_simulations` for a stronger (slower) opponent.
+The competition has two independent tracks, each with its own leaderboard:
+
+  * 2p track — 1-vs-1 Puerto Rico  (``n_seats=2``)
+  * 3p track — 3-player Puerto Rico (``n_seats=3``)
+
+Each track is ranked by its **official** metric — **Elo** in the 2p track,
+**TrueSkill** in the 3p track — with **win rate** shown alongside. Both boards are
+printed and written to results/2p/leaderboard.{md,csv,json} and
+results/3p/leaderboard.{md,csv,json}. Add your own agent to `pool` to see how it
+stacks up. (α-Rank is opt-in analysis — pass ``compute_alpha_rank=True`` if you
+want it; it is not part of the standings.)
 """
 import os
 import sys
@@ -19,8 +26,11 @@ from tournament.leaderboard import save
 from tournament.runner import run_tournament
 
 
-def main():
-    pool = {
+def make_pool():
+    # A fresh factory per game keeps every match reproducible. The same pool
+    # plays both tracks here; for the real competition each track has its own
+    # submissions. (PpoAgent is omitted: its bundled checkpoint is 3p-only.)
+    return {
         "Random":        lambda: RandomAgent(),
         "ActionValue":   lambda: ActionValueAgent(),
         "ShippingRush":  lambda: ShippingRushAgent(),
@@ -29,22 +39,28 @@ def main():
         # MCTS is strong but slow — uncomment to include it (the round-robin
         # will take noticeably longer):
         # "MCTS":        lambda: MctsAgent(num_simulations=30, max_rollout_depth=40),
-        # "PPO":         lambda: PpoAgent("training/checkpoints/ppo_baseline.pt"),
     }
 
+
+def run_track(n_seats: int):
+    track = f"{n_seats}p"
+    print(f"\n===== {track} track ({n_seats}-player) =====")
     result = run_tournament(
-        pool,
+        make_pool(),
         games_per_seating=1,        # raise for tighter confidence intervals
         seed=0,
-        compute_alpha_rank=True,
-        alpha_games_per_pair=4,
         time_limit_s=1.0,
         verbose=True,
+        n_seats=n_seats,
     )
-
-    out = save(result, out_dir="results")
+    out = save(result, out_dir=os.path.join("results", track))
     print("\n" + out["markdown"])
-    print("\nSaved to results/leaderboard.{md,csv,json}")
+    print(f"\nSaved to results/{track}/leaderboard.{{md,csv,json}}")
+
+
+def main():
+    run_track(2)        # 1-vs-1 track
+    run_track(3)        # 3-player track
 
 
 if __name__ == "__main__":

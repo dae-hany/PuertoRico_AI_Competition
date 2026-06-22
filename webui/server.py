@@ -4,8 +4,9 @@ webui/server.py — local web UI for playing and DEBUGGING Puerto Rico agents.
 Run:  python webui/server.py   then open http://127.0.0.1:5000
 
 What it gives you:
-  * configure each of the 3 seats independently — a human (you), any baseline,
-    or YOUR OWN agent (auto-discovered from submissions/, or typed as
+  * pick the player count (2-5; the competition tracks are 2 and 3) and configure
+    each seat independently — a human (you), any baseline, or YOUR OWN agent
+    (auto-discovered from submissions/, or typed as
     "module:Class" / "path/to/file.py:Class");
   * watch bots play each other (set every seat to a bot), or play a seat yourself;
   * competition-rule mirroring while debugging: each agent move is timed, and a

@@ -2,24 +2,31 @@
 puerto_rico/observation.py — flat observation encoding for competition agents.
 
 The environment produces a *nested-dict* observation (global state + one block
-per player). Competition agents instead receive the **flattened 293-dimensional
-float vector** returned by ``flatten_observation()``, together with a 200-dim
-binary action mask (1 = legal, 0 = illegal).
+per player). Competition agents instead receive the **flattened float vector**
+returned by ``flatten_observation()``, together with a 200-dim binary action
+mask (1 = legal, 0 = illegal).
 
-Flat layout (3 players)::
+Its length is ``GLOBAL_DIM + PER_PLAYER_DIM * num_players``, so it depends on the
+track::
 
-    [ global(74) | player_0(73) | player_1(73) | player_2(73) ]  ->  293
+    2p (1-vs-1):  74 + 73*2 = 220
+    3p:           74 + 73*3 = 293   (== OBS_DIM)
+
+Flat layout::
+
+    [ global(74) | player_0(73) | player_1(73) | ... ]
 
 Within each block the sub-features are concatenated in *sorted key order*.
-This exact ordering is the one the bundled PPO baseline was trained on, so it
-must not change. See ``docs/OBSERVATION_AND_ACTIONS.md`` for the full field map.
+This exact ordering is the one the bundled (3p) PPO baseline was trained on, so
+it must not change. The action space is a fixed ``Discrete(200)`` in both tracks.
+See ``docs/OBSERVATION_AND_ACTIONS.md`` for the full field map.
 """
 import numpy as np
 
-OBS_DIM = 293          # length of the flattened observation vector
-ACTION_DIM = 200       # number of discrete actions
 GLOBAL_DIM = 74        # global-state features
 PER_PLAYER_DIM = 73    # per-player features
+OBS_DIM = 293          # flattened observation length for the 3p track (74 + 73*3)
+ACTION_DIM = 200       # number of discrete actions (same in every track)
 
 
 def flatten_observation(obs_dict: dict) -> np.ndarray:
@@ -30,7 +37,8 @@ def flatten_observation(obs_dict: dict) -> np.ndarray:
             i.e. ``{"global_state": {...}, "players": {...}}``.
 
     Returns:
-        ``np.ndarray`` of shape ``(293,)``, dtype ``float32``.
+        ``np.ndarray`` of shape ``(GLOBAL_DIM + PER_PLAYER_DIM * num_players,)``
+        — ``(220,)`` in the 2p track, ``(293,)`` in the 3p track — dtype ``float32``.
     """
     flat = []
 

@@ -1,5 +1,8 @@
 """
-tournament/match.py — play a single 3-player game between Agent instances.
+tournament/match.py — play a single game between Agent instances.
+
+The number of seats is simply ``len(agents)``: pass 2 agents for a 1-vs-1 (2p
+track) game or 3 for a 3p-track game; the engine sets up the matching variant.
 
 Each move is given a wall-clock budget (``time_limit_s``, default 1 s). If an
 agent overruns the budget, raises an exception, or returns an illegal action,
@@ -38,7 +41,10 @@ def _finishing_ranks(vp, tiebreak):
 
 
 def play_game(agents, seed: int = None, time_limit_s: float = 1.0) -> dict:
-    """Play one game between ``agents`` (a list of 3 :class:`Agent` instances).
+    """Play one game between ``agents`` (a list of :class:`Agent` instances).
+
+    The seat count is ``len(agents)`` — 2 for the 1-vs-1 track, 3 for the 3p
+    track.
 
     Args:
         agents: the seated players, in seat order (index = player id).
