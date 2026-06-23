@@ -677,7 +677,9 @@ function renderGame() {
             const item = document.createElement("div");
             item.className = "building-shop-item";
             
-            const stockCount = gameState.building_supply[b.name] || 0;
+            // building_supply is keyed by the engine enum name (e.g. "SMALL_INDIGO_PLANT"),
+            // not the display name (e.g. "Small Indigo Plant") — look it up via ENUM_BUILDINGS.
+            const stockCount = gameState.building_supply[ENUM_BUILDINGS[b.id]] ?? 0;
             
             // Calculate Dynamic Discount
             const activeQuarries = humanPlayer.island_board.filter(t => t.tile_type === "QUARRY" && t.is_occupied).length;
