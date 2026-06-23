@@ -67,18 +67,35 @@ Copy [`submission_template/`](submission_template/) to get started, then read th
 
 | Agent | Type | Strength |
 |---|---|---|
-| `MctsAgent` | Max^N UCT tree search | strong (slow) |
+| `SearchAgent` | alpha‑beta search (**2p**), deterministic node budget | **strongest in 2p** — beats every other baseline |
+| `SearchLiteAgent` | alpha‑beta search (**2p**), small node budget | strong but clearly beatable — a **beginner target** |
+| `MctsAgent` | Max^N UCT tree search (**3p**) | strong (slow); 3p‑oriented |
 | `ActionValueAgent` | greedy heuristic — scores each legal action, plays the best | strong |
 | `ShippingRushAgent` | shipping-focused heuristic | strong |
-| `TradeBuildingAgent` | trade → building heuristic | moderate |
+| `TradeBuildingAgent` | trade → building heuristic | moderate (the strongest *heuristic* in 2p) |
 | `FactoryAgent` | Factory-engine heuristic | weak |
 | `PpoAgent` | PPO self-play (RL) | ~random — a starting point |
 | `RandomAgent` | uniform random legal move | weakest |
 
-All baselines except `PpoAgent` are player-count-agnostic and play **both
-tracks** unchanged. The bundled PPO checkpoint was trained on the 293-dim 3p
-observation, so it is a **3p-only** baseline; a 2p PPO agent would need a 220-dim
-network and its own training run.
+The heuristic baselines (`ActionValue`, `ShippingRush`, `TradeBuilding`,
+`Factory`, `Random`) are player-count-agnostic and play **both tracks**
+unchanged. `SearchAgent` / `SearchLiteAgent` are **2p-focused** — they search the
+1‑vs‑1 game and fall back to a reactive heuristic in a 3p game. `MctsAgent` is
+**3p-oriented** (its value vectors are hard-coded to 3 players, so in a 2p game
+it errors and the harness substitutes random moves). The bundled PPO checkpoint
+is **3p-only** (293-dim); a 2p PPO agent would need its own 220-dim training run.
+
+### Recommended approach for the 2p track
+
+Puerto Rico 1‑vs‑1 is a two-player, winner-takes-all (≈ zero-sum),
+**near‑perfect‑information** game (the only hidden state is the face-down
+plantation draw order) — exactly where **adversarial search** shines.
+`SearchAgent` is a clean, readable alpha‑beta reference you can **play against,
+study, and improve**. Its strength is set by a **node budget** (not wall-clock),
+so it plays the *same* move on any hardware — fair to compare against. See
+**[docs/SEARCH_BASELINE_2P.md](docs/SEARCH_BASELINE_2P.md)** for how it works and
+a ranked list of concrete ways to make it stronger (your opportunity as an
+entrant).
 
 ## Repository layout
 

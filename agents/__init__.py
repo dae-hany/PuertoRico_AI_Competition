@@ -17,7 +17,17 @@ from agents.shipping_rush_agent import ShippingRushAgent
 from agents.trade_building_agent import TradeBuildingAgent
 from agents.factory_agent import FactoryAgent
 from agents.mcts_agent import MctsAgent
-from agents.ppo_agent import PpoAgent
+
+
+def __getattr__(name):
+    # PpoAgent is imported lazily so the package stays importable without the
+    # optional `torch` dependency (see requirements.txt — torch is optional and
+    # only needed for the PPO baseline / training).
+    if name == "PpoAgent":
+        from agents.ppo_agent import PpoAgent
+        return PpoAgent
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Agent",

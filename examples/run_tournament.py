@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent, RandomAgent,
                     ShippingRushAgent, TradeBuildingAgent)
+from agents.search_agent import SearchAgent, SearchLiteAgent  # noqa: F401 (used if pool lines below are uncommented)
 from tournament.leaderboard import save
 from tournament.runner import run_tournament
 
@@ -39,6 +40,11 @@ def make_pool():
         # MCTS is strong but slow — uncomment to include it (the round-robin
         # will take noticeably longer):
         # "MCTS":        lambda: MctsAgent(num_simulations=30, max_rollout_depth=40),
+        # 2p-track alpha-beta baselines (deterministic; slow in a round-robin —
+        # in a 3p game they fall back to a reactive policy). Uncomment to rank
+        # against them; see docs/SEARCH_BASELINE_2P.md.
+        # "SearchLite":  lambda: SearchLiteAgent(),
+        # "Search":      lambda: SearchAgent(),
     }
 
 

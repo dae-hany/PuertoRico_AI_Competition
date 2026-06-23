@@ -35,8 +35,13 @@ sys.path.insert(0, ROOT)
 from puerto_rico import ForwardModel, flatten_observation, make_env
 from puerto_rico.constants import BUILDING_DATA, BuildingType, Good, Role, TileType
 from agents.base import Agent
-from agents import (ActionValueAgent, FactoryAgent, MctsAgent, PpoAgent,
+from agents import (ActionValueAgent, FactoryAgent, MctsAgent,
                     RandomAgent, ShippingRushAgent, TradeBuildingAgent)
+from agents.search_agent import SearchAgent, SearchLiteAgent
+try:                                      # PPO is optional (needs torch)
+    from agents import PpoAgent
+except Exception:
+    PpoAgent = None
 
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 app = Flask(__name__, static_folder="static", static_url_path="")
@@ -53,13 +58,16 @@ def _ppo():
 
 BASELINE_FACTORIES = {
     "random":      (RandomAgent,                                      "Random (weakest)"),
-    "ppo":         (_ppo,                                             "PPO (RL, ~random)"),
     "factory":     (FactoryAgent,                                     "Factory (heuristic)"),
     "trade":       (TradeBuildingAgent,                               "TradeBuilding (heuristic)"),
     "shipping":    (ShippingRushAgent,                                "ShippingRush (strong)"),
     "actionvalue": (ActionValueAgent,                                 "ActionValue (strong)"),
     "mcts":        (lambda: MctsAgent(num_simulations=30, max_rollout_depth=40), "MCTS (search, strong)"),
+    "searchlite":  (SearchLiteAgent,                                  "SearchLite (alpha-beta, beginner target — 2p)"),
+    "search":      (SearchAgent,                                      "Search (alpha-beta, strong & deterministic — 2p)"),
 }
+if PpoAgent is not None:                  # only offer PPO when torch is available
+    BASELINE_FACTORIES["ppo"] = (_ppo, "PPO (RL, ~random)")
 
 
 def discover_submissions():
