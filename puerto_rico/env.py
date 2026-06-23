@@ -1,3 +1,5 @@
+import copy
+
 from pettingzoo import AECEnv
 try:
     from pettingzoo.utils.agent_selector import AgentSelector  # pettingzoo >= 1.24.4
@@ -25,6 +27,27 @@ class PuertoRicoEnv(AECEnv):
 
         self._action_spaces = {agent: self._define_action_space() for agent in self.possible_agents}
         self._observation_spaces = {agent: self._define_observation_space() for agent in self.possible_agents}
+
+    # Static config built once in __init__ and never mutated during a game.
+    # Sharing (not deep-copying) these makes ForwardModel.clone() ~7x faster,
+    # since the gymnasium observation Dict-space is by far the costliest object
+    # to deep-copy (it dominates a full env deepcopy). Planning agents clone the
+    # env thousands of times per move, so this directly sets the search budget.
+    _CLONE_SHARED_ATTRS = frozenset({
+        "_action_spaces", "_observation_spaces",
+        "possible_agents", "agent_name_mapping",
+    })
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memo[id(self)] = new
+        for k, v in self.__dict__.items():
+            if k in self._CLONE_SHARED_ATTRS:
+                new.__dict__[k] = v                       # share immutable config
+            else:
+                new.__dict__[k] = copy.deepcopy(v, memo)  # copy mutable game state
+        return new
 
     def _define_action_space(self) -> spaces.Discrete:
         # === Action Mapping ===
