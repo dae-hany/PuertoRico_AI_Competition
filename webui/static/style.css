@@ -158,9 +158,9 @@ h1, h2, h3, h4 {
 
 .player-setup-row {
     display: grid;
-    grid-template-columns: 80px 1fr 150px;
+    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr);
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: var(--radius-sm);
@@ -178,9 +178,15 @@ h1, h2, h3, h4 {
     color: var(--text-primary);
     border-radius: 6px;
     padding: 8px 12px;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     outline: none;
     transition: border 0.2s;
+    width: 100%;
+    min-width: 0;
+}
+
+.player-setup-row input::placeholder {
+    color: var(--text-muted);
 }
 
 .player-setup-row input:focus {
@@ -193,8 +199,11 @@ h1, h2, h3, h4 {
     color: var(--text-primary);
     border-radius: 6px;
     padding: 8px;
+    font-size: 0.9rem;
     outline: none;
     cursor: pointer;
+    width: 100%;
+    min-width: 0;
 }
 
 /* Buttons */
@@ -283,6 +292,11 @@ h1, h2, h3, h4 {
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: var(--text-secondary);
     padding: 12px;
+}
+
+.count-btn:hover:not(.active) {
+    border-color: rgba(255, 255, 255, 0.25);
+    color: var(--text-primary);
 }
 
 .count-btn.active {
@@ -1291,4 +1305,20 @@ h1, h2, h3, h4 {
 :root[data-theme="light"] .tab-btn.active {
     background: rgba(0, 0, 0, 0.04);
     border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .count-btn {
+    background: rgba(15, 23, 42, 0.03);
+    border-color: rgba(15, 23, 42, 0.14);
+}
+
+:root[data-theme="light"] .count-btn:hover:not(.active) {
+    border-color: rgba(79, 70, 229, 0.5);
+    color: var(--text-primary);
+}
+
+:root[data-theme="light"] .count-btn.active {
+    background: rgba(79, 70, 229, 0.1);
+    border-color: var(--accent-indigo);
+    box-shadow: 0 0 10px rgba(79, 70, 229, 0.15);
 }

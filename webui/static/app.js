@@ -169,7 +169,7 @@ function renderPlayerSetupRows(count) {
             <label>Player ${i + 1}</label>
             <select id="p-type-${i}">${agentSelectOptions()}</select>
             <input type="text" id="p-custom-${i}" class="custom-spec"
-                   placeholder="or module:Class / file.py:Class">
+                   placeholder="module:Class / file.py:Class">
         `;
         playerSetupList.appendChild(row);
         const sel = document.getElementById(`p-type-${i}`);
