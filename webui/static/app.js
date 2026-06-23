@@ -306,6 +306,18 @@ function renderGame() {
     document.getElementById("global-colonist-ship").innerText = gameState.colonists_ship;
     document.getElementById("global-colonist-supply").innerText = gameState.colonists_supply;
 
+    // Goods remaining in the general supply (Craftsman production draws from here).
+    const gsList = document.getElementById("goods-supply-list");
+    if (gsList) {
+        const gs = gameState.goods_supply || {};
+        gsList.innerHTML = ENUM_GOODS.map(gName => {
+            const spec = GOODS[gName];
+            const n = gs[gName] ?? 0;
+            const empty = n === 0 ? " gs-empty" : "";
+            return `<span class="goods-badge ${spec.badge}${empty}" title="${spec.name}: ${n} left in supply">${spec.emoji} ${n}</span>`;
+        }).join("");
+    }
+
     // Always-visible current-turn indicator in the header (color-coded, pulses on change)
     const turnEl = document.getElementById("turn-indicator");
     if (turnEl) {

@@ -349,6 +349,9 @@ h1, h2, h3, h4 {
 .header-right {
     display: flex;
     gap: 16px;
+    flex-wrap: wrap;
+    row-gap: 10px;
+    justify-content: flex-end;
 }
 
 .resource-badge {
@@ -876,6 +879,22 @@ h1, h2, h3, h4 {
 .goods-badge.badge-TOBACCO { border-color: rgba(249, 115, 22, 0.3); color: #fed7aa; }
 .goods-badge.badge-COFFEE { border-color: rgba(120, 53, 15, 0.3); color: #d97706; }
 
+/* Goods Supply badge (header) */
+.goods-supply-list {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.goods-supply-badge .goods-badge {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    padding: 3px 8px;
+}
+.goods-supply-badge .goods-badge.gs-empty {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
 /* Grid Slots */
 .board-grids {
     display: flex;
@@ -1322,3 +1341,13 @@ h1, h2, h3, h4 {
     border-color: var(--accent-indigo);
     box-shadow: 0 0 10px rgba(79, 70, 229, 0.15);
 }
+
+:root[data-theme="light"] .goods-badge {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.12);
+}
+:root[data-theme="light"] .goods-badge.badge-CORN { color: #a16207; }
+:root[data-theme="light"] .goods-badge.badge-INDIGO { color: #4338ca; }
+:root[data-theme="light"] .goods-badge.badge-SUGAR { color: #475569; }
+:root[data-theme="light"] .goods-badge.badge-TOBACCO { color: #c2410c; }
+:root[data-theme="light"] .goods-badge.badge-COFFEE { color: #78350f; }

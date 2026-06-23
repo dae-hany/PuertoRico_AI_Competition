@@ -233,6 +233,7 @@ def serialize_state(env):
             for s in game.cargo_ships
         ],
         "building_supply": {b.name: c for b, c in game.building_supply.items()},
+        "goods_supply": {g.name: c for g, c in game.goods_supply.items()},
         "game_over": game.check_game_end(),
         "game_log": game_log,
         "last_ai_move": last_ai_move,
