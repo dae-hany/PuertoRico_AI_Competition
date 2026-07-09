@@ -142,6 +142,9 @@ class PuertoRicoEnv(AECEnv):
     def reset(self, seed=None, options=None):
         # Seed control
         final_seed = seed if self.random_seed_mode else self.fixed_seed
+        # Remember the seed so ForwardModel can derive a reproducible — but
+        # engine-independent — RNG for determinizing the hidden plantation order.
+        self._seed = final_seed
         if final_seed is not None:
             import random
             random.seed(final_seed)

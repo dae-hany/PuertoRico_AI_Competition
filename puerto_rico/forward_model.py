@@ -16,34 +16,98 @@ them exactly that, without exposing the full environment internals:
 The live model always reflects the *current* decision point, so calling
 ``model.clone()`` inside ``act()`` snapshots the game exactly as the acting
 player sees it. The bundled MCTS agent is built entirely on this API.
+
+Hidden information — the plantation draw order
+----------------------------------------------
+The face-down plantation pile is the *only* secret in Puerto Rico. Players
+legitimately know *which* tiles remain (the multiset is deducible by counting
+the public tiles), but never the *order* they will be drawn in. The forward
+model enforces this for every agent, search-based or not:
+
+* ``clone()`` **determinizes** the hidden pile — the copy's face-down order is
+  randomly permuted (multiset preserved). Simulating a clone therefore plays
+  out a random *consistent* world, never the true future draws. Cloning a clone
+  keeps its order, so a search tree stays self-consistent within one move.
+* The raw ``game``/``env`` accessors on the *live* model return a determinized
+  snapshot too, so the real draw order cannot be read directly without cloning.
+
+The randomisation is independent of the engine's own RNG (it never perturbs the
+real game) yet reproducible when the match is seeded, so seeded matches still
+replay identically.
 """
 import copy
+import random
 
 import numpy as np
 
 from puerto_rico.observation import flatten_observation
 
 
+def _determinize_plantations(game, rng) -> None:
+    """Randomly permute the face-down plantation order in place (multiset kept).
+
+    Hides the only secret in the game — the draw order of the face-down
+    plantation tiles — while preserving everything a player may legitimately
+    deduce (which tiles remain). The discard pile is shuffled too; it is itself
+    reshuffled by the engine before it is ever drawn, but randomising it here
+    means a peek at its order reveals nothing either.
+    """
+    stack = getattr(game, "plantation_stack", None)
+    if stack and len(stack) > 1:
+        rng.shuffle(stack)
+    discard = getattr(game, "plantation_discard", None)
+    if discard and len(discard) > 1:
+        rng.shuffle(discard)
+
+
 class ForwardModel:
     """A thin, clone-able facade over a Puerto Rico environment.
 
     Never mutate the live model you receive in ``on_game_start`` — clone it
-    first. Each ``clone()`` is a fully independent deep copy.
+    first. Each ``clone()`` is a fully independent deep copy whose hidden
+    plantation order is freshly determinized.
     """
 
-    def __init__(self, env):
+    def __init__(self, env, *, _live=True, _rng=None):
         self._env = env
+        self._live = _live
+        if _rng is not None:
+            self._rng = _rng
+        elif _live:
+            # An RNG independent of the engine's own stream (so determinization
+            # never perturbs the real game) but derived from the match seed when
+            # present (so seeded matches replay identically). The +1 offset keeps
+            # it decorrelated from the seed that produced the *true* order.
+            seed = getattr(env.unwrapped, "_seed", None)
+            self._rng = random.Random() if seed is None else random.Random(seed + 1)
+        else:
+            self._rng = None
+        # Cache for the redacted live view, rebuilt only when the game advances.
+        self._redacted = None
+        self._redacted_step = object()  # sentinel: forces first build
 
     # ── cloning ──────────────────────────────────────────────────────────────
     def clone(self) -> "ForwardModel":
-        """Return an independent deep copy that can be mutated freely."""
-        return ForwardModel(copy.deepcopy(self._env))
+        """Return an independent deep copy that can be mutated freely.
+
+        Cloning the *live* model determinizes the hidden plantation order, so no
+        amount of search can recover the true draw order. Cloning a clone keeps
+        its order, so a search tree stays self-consistent within one move.
+        """
+        new_env = copy.deepcopy(self._env)
+        if self._live:
+            _determinize_plantations(new_env.unwrapped.game, self._rng)
+        return ForwardModel(new_env, _live=False)
 
     # ── advanced access ──────────────────────────────────────────────────────
     @property
     def env(self):
-        """The underlying PettingZoo environment (advanced use)."""
-        return self._env
+        """The underlying PettingZoo environment (advanced use).
+
+        On the live model this is a determinized snapshot — the real plantation
+        draw order is never exposed. Clone first if you need to simulate.
+        """
+        return self._redacted_view() if self._live else self._env
 
     @property
     def game(self):
@@ -52,8 +116,27 @@ class ForwardModel:
         Read-only: do not mutate it directly — ``clone()`` first. Heuristic
         agents read fields such as ``game.current_player_idx`` and
         ``game.players[i]`` from here.
+
+        On the live model this is a determinized snapshot: every public field is
+        the true current value, but ``plantation_stack`` is randomly permuted so
+        the secret draw order cannot be read off it.
         """
-        return self._env.unwrapped.game
+        view = self._redacted_view() if self._live else self._env
+        return view.unwrapped.game
+
+    def _redacted_view(self):
+        """A determinized snapshot of the live env, rebuilt when the game moves.
+
+        Repeated reads within one decision point reuse the cached snapshot, so
+        ``game``/``env`` stay stable and cheap during a single ``act()``.
+        """
+        step = getattr(self._env.unwrapped, "_game_step_count", None)
+        if self._redacted is None or self._redacted_step != step:
+            snap = copy.deepcopy(self._env)
+            _determinize_plantations(snap.unwrapped.game, self._rng)
+            self._redacted = snap
+            self._redacted_step = step
+        return self._redacted
 
     # ── queries ──────────────────────────────────────────────────────────────
     def is_terminal(self) -> bool:
@@ -87,6 +170,7 @@ class ForwardModel:
 
         Advanced: most agents use the flat ``observation`` argument of
         ``act()``. Some heuristic baselines read structured fields from here.
+        The observation never encodes the plantation draw order.
         """
         if self.is_terminal():
             return {}

@@ -113,7 +113,19 @@ class MyAgent(Agent):
 ## Hidden information
 
 - The **only** hidden information in the game is the **face-down plantation draw
-  order**. Do **not** attempt to read it.
+  order**.
+- This is **enforced by the forward model**, not left to the honor system. You
+  legitimately know *which* tiles remain face-down (the multiset is deducible by
+  counting the public tiles), but **never the order** they will be drawn in:
+  - `forward_model.clone()` **determinizes** the hidden pile — every clone gets a
+    fresh random order (multiset preserved), so search/simulation only ever plays
+    out a random *consistent* world, never the true future draws. Cloning a clone
+    keeps its order, so a search tree stays self-consistent within one move.
+  - The raw `forward_model.game` / `forward_model.env` accessors on the live
+    model also return a **determinized snapshot**, so the true order cannot be
+    read directly without cloning.
+  - The randomisation is independent of the real game (it never perturbs actual
+    play) and reproducible under a fixed match seed.
 
 ## Environment note (for organizers)
 
