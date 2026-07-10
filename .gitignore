@@ -31,3 +31,4 @@ submissions/*.py
 _verify_*.py
 _webtest.py
 _scratch*.py
+training/data/

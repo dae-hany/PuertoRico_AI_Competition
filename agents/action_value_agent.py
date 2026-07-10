@@ -242,13 +242,22 @@ class ActionValueAgent(Agent):
             good = Good(good_idx)
             bonus = self._trade_bonus(game, player_idx, good, decay)
         
-        # ═══ Captain Phase: Ship Selection (44-63) ═══
-        elif 44 <= action_idx < 64:
+        # ═══ Captain Phase: Ship Selection (44-58) ═══
+        elif 44 <= action_idx < 59:
             ship_good_idx = action_idx - 44
             ship_idx = ship_good_idx // 5
             good_idx = ship_good_idx % 5
             good = Good(good_idx)
             bonus = self._shipping_bonus(game, player_idx, ship_idx, good, decay)
+
+        # ═══ Captain Phase: Wharf Load (59-63) ═══
+        # (Bug fix: this logic previously sat at 74-78, which the env never
+        # emits, so real Wharf loads fell into the ship branch above as an
+        # out-of-range ship_idx and scored 0.0 — ranking them dead last.)
+        elif 59 <= action_idx < 64:
+            good = Good(action_idx - 59)
+            qty = p.goods[good]
+            bonus = qty * 1.0  # Direct VP from wharf shipping
         
         # ═══ Captain Store Phase: Good Selection (64-68) ═══
         elif 64 <= action_idx < 69:
@@ -280,13 +289,6 @@ class ActionValueAgent(Agent):
             if BUILDING_DATA.get(b_type, [0,0,0,0,False])[4]: # is_large 
                 bonus = 2.0
             bonus *= decay
-        
-        # ═══ Wharf Phase (74-78) ═══
-        elif 74 <= action_idx < 79:
-            good_idx = action_idx - 74
-            good = Good(good_idx)
-            qty = p.goods[good]
-            bonus = qty * 1.0  # Direct VP from wharf shipping
         
         return base_heuristic + bonus
     
