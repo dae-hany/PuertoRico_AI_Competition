@@ -6,17 +6,18 @@ agents/ppo_agent.py — PPO self-play network + inference agent.
 the highest-probability *legal* action. This is the only baseline that needs
 PyTorch.
 
-Reality check: the bundled checkpoint plays at roughly *random* strength. Puerto
-Rico is hard for plain RL — that is the central finding of the benchmark this
-competition is built on. The PPO agent is therefore a **starting point to
-improve on**, not a strong opponent. The strong baselines are the heuristics and
-MCTS.
+The bundled checkpoint is 5M steps of parameter-sharing self-play and beats every
+heuristic baseline head-to-head in the 3p track (e.g. 90% over 60 seat-rotated
+games against :class:`~agents.action_value_agent.ActionValueAgent`). It is
+**3p-only** — the network is 293-dim, so the 2p track needs its own 220-dim run.
+See ``training/README.md`` for the measured table and how to train your own.
 """
 import numpy as np
 import torch
 import torch.nn as nn
 
 from agents.base import Agent
+from puerto_rico.observation import egocentric_view
 
 OBS_DIM = 293
 ACTION_DIM = 200
@@ -100,22 +101,41 @@ class PpoNetwork(nn.Module):
 
 
 class PpoAgent(Agent):
-    """Plays a trained :class:`PpoNetwork` greedily (highest-probability legal move)."""
+    """Plays a trained :class:`PpoNetwork` greedily (highest-probability legal move).
+
+    Checkpoints trained by ``training/train_ppo.py`` use the **egocentric** view
+    (:func:`puerto_rico.observation.egocentric_view`), so the same rotation is
+    applied here before the forward pass. The flag is read back from the
+    checkpoint; pass ``egocentric=`` explicitly to override.
+    """
 
     name = "PPO"
 
     def __init__(self, checkpoint_path: str = None, obs_dim: int = OBS_DIM,
-                 action_dim: int = ACTION_DIM, device: str = "cpu"):
+                 action_dim: int = ACTION_DIM, device: str = "cpu",
+                 egocentric: bool = None):
         super().__init__()
         self.device = device
         self.net = PpoNetwork(obs_dim, action_dim).to(device)
+        ckpt_egocentric = True           # what train_ppo.py produces today
         if checkpoint_path is not None:
-            ckpt = torch.load(checkpoint_path, map_location=device)
-            state = ckpt["model_state"] if isinstance(ckpt, dict) and "model_state" in ckpt else ckpt
+            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+            if isinstance(ckpt, dict) and "model_state" in ckpt:
+                state = ckpt["model_state"]
+                # Absent flag ⇒ a pre-egocentric checkpoint (absolute seat order).
+                ckpt_egocentric = bool((ckpt.get("args") or {}).get("egocentric", False))
+            else:
+                state = ckpt          # bare state_dict: legacy encoding
+                ckpt_egocentric = False
             self.net.load_state_dict(state)
+        self.egocentric = ckpt_egocentric if egocentric is None else egocentric
         self.net.eval()
 
     def act(self, observation: np.ndarray, action_mask: np.ndarray) -> int:
+        if self.egocentric:
+            # act() is only ever called on our turn, so the observation's
+            # current_player field identifies us — no seat index needed.
+            observation = egocentric_view(observation)
         obs_t = torch.as_tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
         mask_t = torch.as_tensor(action_mask, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():

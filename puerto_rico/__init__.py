@@ -4,11 +4,13 @@ Public API::
 
     from puerto_rico import make_env, PuertoRicoEnv, ForwardModel
     from puerto_rico import flatten_observation, OBS_DIM, ACTION_DIM, constants
+    from puerto_rico import egocentric_view          # optional seat-relative view
 """
 from puerto_rico import constants
 from puerto_rico.env import PuertoRicoEnv
 from puerto_rico.forward_model import ForwardModel
-from puerto_rico.observation import ACTION_DIM, OBS_DIM, flatten_observation
+from puerto_rico.observation import (ACTION_DIM, OBS_DIM, egocentric_view,
+                                     flatten_observation)
 
 
 def make_env(seed=None, num_players: int = 3) -> PuertoRicoEnv:
@@ -30,6 +32,7 @@ __all__ = [
     "PuertoRicoEnv",
     "ForwardModel",
     "flatten_observation",
+    "egocentric_view",
     "OBS_DIM",
     "ACTION_DIM",
     "constants",

@@ -2,12 +2,12 @@
 
 Baseline opponents (strong → weak):
 
+    PpoAgent            — PPO self-play RL (3p-only; beats every heuristic below)
     MctsAgent           — Max^N UCT planning (strong, slow)
     ActionValueAgent    — greedy heuristic action scorer (strong, fast)
     ShippingRushAgent   — shipping-focused heuristic
     TradeBuildingAgent  — trade → building heuristic
     FactoryAgent        — Factory-engine heuristic
-    PpoAgent            — self-play RL example (currently ~random; a starting point)
     RandomAgent         — uniform random over legal actions (weakest)
 """
 from agents.base import Agent

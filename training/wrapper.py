@@ -4,6 +4,8 @@ from pettingzoo.utils.env import AECEnv
 from pettingzoo.utils.wrappers import BaseWrapper
 
 from puerto_rico.constants import BUILDING_DATA, BuildingType, TileType
+from puerto_rico.observation import (GLOBAL_DIM, PER_PLAYER_DIM,
+                                     egocentric_view, flatten_observation)
 
 class CleanRLAECWrapper(BaseWrapper):
     """
@@ -14,18 +16,27 @@ class CleanRLAECWrapper(BaseWrapper):
 
     Standard CleanRL MARL for PettingZoo expects the observation to be flattened.
 
+    egocentric:
+      True (default) — rotate the player blocks so block 0 is always the observing
+      player (see ``puerto_rico.observation.egocentric_view``). Parameter-sharing
+      self-play needs this: without it one network has to serve three different
+      seat-to-offset mappings selected by a single raw scalar. Agents that consume
+      a checkpoint must apply the same rotation — ``agents.ppo_agent.PpoAgent``
+      does. Set False only to reproduce the old absolute-seat encoding.
+
     obs_mode:
       'full'      — all player states visible (default)
-      'self_only' — opponent dims zeroed out; layout is [global(74)|self(73)|opp1(73)|opp2(73)]
+      'self_only' — opponent dims zeroed out (RQ3-C2 ablation)
     """
-    # Obs layout constants (3-player)
-    _GLOBAL_DIM     = 74
-    _PER_PLAYER_DIM = 73
+    # Obs layout constants (kept as attributes for backwards compatibility)
+    _GLOBAL_DIM     = GLOBAL_DIM
+    _PER_PLAYER_DIM = PER_PLAYER_DIM
 
-    def __init__(self, env: AECEnv, obs_mode: str = 'full'):
+    def __init__(self, env: AECEnv, obs_mode: str = 'full', egocentric: bool = True):
         super().__init__(env)
         assert obs_mode in ('full', 'self_only'), f"Unknown obs_mode: {obs_mode}"
         self.obs_mode = obs_mode
+        self.egocentric = egocentric
 
         # Flatten the observation space, except the action_mask
         self._orig_obs_space = env.observation_space(env.possible_agents[0])
@@ -51,36 +62,32 @@ class CleanRLAECWrapper(BaseWrapper):
         return 0
         
     def _flatten_obs(self, obs_dict):
-        flat_arrays = []
-        
-        # Global state
-        global_state = obs_dict["global_state"]
-        for key in sorted(global_state.keys()):
-            flat_arrays.append(global_state[key].flatten())
-            
-        # Player states
-        players = obs_dict["players"]
-        for p_key in sorted(players.keys()):
-            p_state = players[p_key]
-            for key in sorted(p_state.keys()):
-                flat_arrays.append(p_state[key].flatten())
-                
-        return np.concatenate(flat_arrays).astype(np.float32)
+        # Delegate to the canonical encoder so training and the competition
+        # harness can never drift apart.
+        return flatten_observation(obs_dict)
 
     def observe(self, agent: str):
         obs = self.env.observe(agent)
         flat_obs = self._flatten_obs(obs["observation"])
+        n_players = self.env.unwrapped.num_players
+        p_idx = self.env.unwrapped.agent_name_mapping[agent]
+
+        if self.egocentric:
+            # Centre on the *requested* agent, not on whoever is to move — this
+            # method is also called off-turn (e.g. to bootstrap a value estimate).
+            flat_obs = egocentric_view(flat_obs, self_idx=p_idx,
+                                       num_players=n_players)
+            self_block = 0
+        else:
+            flat_obs = flat_obs.copy()
+            self_block = p_idx
 
         if self.obs_mode == 'self_only':
-            # Zero out all opponent player dims; keep global + own player dims.
-            # Layout: [global(74) | player_0(73) | player_1(73) | player_2(73)]
-            p_idx = int(agent.split('_')[1])
-            flat_obs = flat_obs.copy()
-            for j in range(3):
-                if j != p_idx:
-                    lo = self._GLOBAL_DIM + j * self._PER_PLAYER_DIM
-                    hi = lo + self._PER_PLAYER_DIM
-                    flat_obs[lo:hi] = 0.0
+            # Zero out every opponent block; keep global + own player dims.
+            for j in range(n_players):
+                if j != self_block:
+                    lo = GLOBAL_DIM + j * PER_PLAYER_DIM
+                    flat_obs[lo:lo + PER_PLAYER_DIM] = 0.0
 
         return {
             "observation": flat_obs,

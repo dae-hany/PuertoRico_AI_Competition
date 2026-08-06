@@ -69,6 +69,29 @@ the **same offsets** in both tracks; the 3p track simply adds a third
 The per‑player blocks are **absolute** (player_0/1/…), not ego‑centric. On your
 turn, the global `current_player` field (offset 36) tells you which block is you.
 
+### Optional: the ego‑centric view
+
+The absolute layout means "my stuff" lives at a different offset depending on
+which seat you drew. That is fine for a hand‑written heuristic (it just reads
+offset 36 first) but awkward for a *learned* agent, which would have to learn a
+seat‑selection rule instead of a strategy. `egocentric_view()` rotates a flat
+observation so **block 0 is always you** and the remaining blocks follow in turn
+order; the two seat‑valued global fields (`current_player`, `governor_idx`) are
+rewritten as offsets relative to you, so the result is self‑consistent:
+
+```python
+from puerto_rico import egocentric_view
+
+def act(self, observation, action_mask):
+    obs = egocentric_view(observation)     # block 0 is now me, always
+    ...
+```
+
+It is a **view transform, not a format change** — the encoding above is still
+what the harness hands you, and using it is entirely optional. The bundled PPO
+baseline is trained and played through this rotation
+(see [`../training/README.md`](../training/README.md)).
+
 ### Global block — offsets 0–73
 
 | Offset | Field (size) | Meaning |

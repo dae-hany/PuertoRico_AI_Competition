@@ -67,7 +67,7 @@ BASELINE_FACTORIES = {
     "search":      (SearchAgent,                                      "Search (alpha-beta, strong & deterministic — 2p)"),
 }
 if PpoAgent is not None:                  # only offer PPO when torch is available
-    BASELINE_FACTORIES["ppo"] = (_ppo, "PPO (RL, ~random)")
+    BASELINE_FACTORIES["ppo"] = (_ppo, "PPO (RL self-play, strong — 3p)")
 
 
 def discover_submissions():
