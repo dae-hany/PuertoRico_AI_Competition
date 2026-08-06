@@ -192,6 +192,19 @@ class PuertoRicoEnv(AECEnv):
             "action_mask": mask
         }
 
+    def _mayor_empty_slots(self, p):
+        """Colonist-placeable slots the player has right now, as (is_city, idx)."""
+        slots = []
+        for i, t in enumerate(p.island_board):
+            if t.tile_type != TileType.EMPTY and not t.is_occupied:
+                slots.append((False, i))
+        for i, b in enumerate(p.city_board):
+            if b.building_type not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE):
+                cap = BUILDING_DATA[b.building_type][2]
+                for _ in range(cap - b.colonists):
+                    slots.append((True, i))
+        return slots
+
     def _execute_auto_actions(self):
         """
         Automatically execute actions when there's no meaningful choice.
@@ -204,7 +217,20 @@ class PuertoRicoEnv(AECEnv):
         p = self.game.players[player_idx]
         phase = self.game.current_phase
 
-        # 1. Check for pass-only or single-choice situations
+        # 1. Mayor is the only phase with no Pass action, so a player with
+        #    nothing to place has a legitimately empty action mask — and would
+        #    stall the phase rather than be auto-advanced. This check therefore
+        #    has to run *before* the empty-mask early return below, otherwise it
+        #    is unreachable. (Engine invariants make the state unreachable today:
+        #    every seat is recalled at the start of its Mayor turn, which frees
+        #    all of its slots, and no seat can own zero colonists or zero tiles.
+        #    This keeps the env safe if those invariants ever change.)
+        empty_slots = self._mayor_empty_slots(p) if phase == Phase.MAYOR else []
+        if phase == Phase.MAYOR and (p.unplaced_colonists == 0 or len(empty_slots) == 0):
+            self.game._advance_phase_turn()
+            return True
+
+        # 2. Check for pass-only or single-choice situations
         mask = self.valid_action_mask()
         valid_actions = np.where(mask == 1)[0]
 
@@ -247,27 +273,12 @@ class PuertoRicoEnv(AECEnv):
                 self.game.action_craftsman(player_idx, privilege_good=None)
                 return True
 
-        # 3. Mayor phase auto-fill
-        if phase == Phase.MAYOR:
-            empty_slots = []
-            for i, t in enumerate(p.island_board):
-                if t.tile_type != TileType.EMPTY and not t.is_occupied:
-                    empty_slots.append((False, i))
-            for i, b in enumerate(p.city_board):
-                if b.building_type not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE):
-                    from puerto_rico.constants import BUILDING_DATA
-                    cap = BUILDING_DATA[b.building_type][2]
-                    for _ in range(cap - b.colonists):
-                        empty_slots.append((True, i))
-
-            if p.unplaced_colonists == 0 or len(empty_slots) == 0:
-                self.game._advance_phase_turn()
-                return True
-
-            if p.unplaced_colonists >= len(empty_slots) and len(empty_slots) > 0:
-                is_city, slot_idx = empty_slots[0]
-                self.game.action_mayor_place_colonist(player_idx, is_city=is_city, slot_idx=slot_idx)
-                return True
+        # 3. Mayor phase auto-fill: more colonists than slots, so where each one
+        #    goes carries no decision — place them without asking.
+        if phase == Phase.MAYOR and p.unplaced_colonists >= len(empty_slots):
+            is_city, slot_idx = empty_slots[0]
+            self.game.action_mayor_place_colonist(player_idx, is_city=is_city, slot_idx=slot_idx)
+            return True
 
         return False
 
