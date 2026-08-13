@@ -106,6 +106,8 @@ entrant).
 puerto_rico/        core game engine + environment + forward model
 agents/             the Agent interface and all baseline agents
 tournament/         single-match harness, round-robin runner, rankers, leaderboard
+                    (sandbox.py runs each entrant in its own process — the
+                     official run's time limit and anti-tampering guarantees)
 training/           optional PPO self-play trainer + the bundled 3p RL checkpoint
 webui/              browser UI to play, watch, and debug agents
 examples/           play_one_game.py, run_tournament.py
