@@ -27,6 +27,7 @@ import itertools
 import os
 import sys
 import time
+import zlib
 from concurrent.futures import ProcessPoolExecutor
 
 for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
@@ -93,13 +94,25 @@ def _play_group(args):
 
 
 def _duel(args):
-    """Seat-balanced head-to-head: focal vs a field of one opponent."""
+    """Seat-balanced head-to-head: focal vs a field of one opponent.
+
+    Stops early if the cell runs past ``budget_s`` (after a minimum sample), and
+    reports how many games it actually played. A search agent costs ~75 s a game,
+    so without a bound one cell decides how long the whole report takes — and a
+    silently truncated cell would be worse than a small one honestly labelled.
+    """
     from tournament.match import play_game
-    focal, opponent, n_seats, n_games, base_seed = args
+    focal, opponent, n_seats, n_games, base_seed, budget_s = args
+
+    min_games = min(n_games, 2 * n_seats)        # keep the seat rotation balanced
+    deadline = time.perf_counter() + budget_s if budget_s else None
 
     wins = 0.0
     margins = []
     for g in range(n_games):
+        if (deadline is not None and len(margins) >= min_games
+                and time.perf_counter() > deadline):
+            break
         seating = [opponent] * n_seats
         seat = g % n_seats                       # rotate the focal seat
         seating[seat] = focal
@@ -109,9 +122,11 @@ def _duel(args):
             wins += 1.0 / len(result["winners"])
         others = [v for i, v in enumerate(result["scores"]) if i != seat]
         margins.append(result["scores"][seat] - max(others))
+
+    played = len(margins)
     return {"focal": focal, "opponent": opponent, "n_seats": n_seats,
-            "games": n_games, "win_rate": wins / n_games,
-            "mean_margin": sum(margins) / len(margins)}
+            "games": played, "win_rate": wins / played,
+            "mean_margin": sum(margins) / played}
 
 
 # ── reporting ────────────────────────────────────────────────────────────────
@@ -135,19 +150,19 @@ def round_robin_table(records, names, n_seats):
 
 
 def duel_table(rows, n_seats):
+    """One row per planner; each cell is ``win% (games)`` — the sample size is
+    part of the number, since the slow cells play fewer games."""
     opponents = HEURISTICS
     by_focal = {}
     for row in rows:
         by_focal.setdefault(row["focal"], {})[row["opponent"]] = row
 
-    lines = ["| Agent | " + " | ".join(f"vs {o}" for o in opponents) + " | games/cell |",
-             "|-------|" + "|".join(["------:"] * len(opponents)) + "|-----------:|"]
+    lines = ["| Agent | " + " | ".join(f"vs {o}" for o in opponents) + " |",
+             "|-------|" + "|".join(["------:"] * len(opponents)) + "|"]
     for focal, cells in by_focal.items():
-        played = [cells[o] for o in opponents if o in cells]
-        rates = [f"{cells[o]['win_rate'] * 100:.0f}%" if o in cells else "—"
-                 for o in opponents]
-        n = played[0]["games"] if played else 0
-        lines.append(f"| `{focal}` | " + " | ".join(rates) + f" | {n} |")
+        rates = [f"{cells[o]['win_rate'] * 100:.0f}% ({cells[o]['games']})"
+                 if o in cells else "—" for o in opponents]
+        lines.append(f"| `{focal}` | " + " | ".join(rates) + " |")
     return "\n".join(lines)
 
 
@@ -158,6 +173,8 @@ def main():
                         help="smaller samples; for a smoke test, not for the docs")
     parser.add_argument("--skip-planners", action="store_true",
                         help="heuristic round-robins only (a couple of minutes)")
+    parser.add_argument("--cell-budget", type=float, default=600.0,
+                        help="wall-clock cap per duel cell; bounds the whole run")
     # Tracked, not written into the gitignored results/ dir: the numbers the
     # README and the submission guide quote should be versioned next to them.
     parser.add_argument("--out", default="docs/BASELINES.md")
@@ -188,15 +205,22 @@ def main():
                     continue
                 n = duel_n if focal in cheap else max(6, duel_n // 3)
                 for j, opponent in enumerate(HEURISTICS):
+                    # A stable seed: Python's hash() of a str is salted per
+                    # process, so using it here would silently reseed the whole
+                    # table on every run.
+                    tag = zlib.crc32(f"{focal}|{opponent}|{n_seats}".encode())
                     jobs_duel.append((focal, opponent, n_seats, n,
-                                      500_000 + hash((focal, opponent, n_seats)) % 10_000))
+                                      500_000 + tag % 10_000, args.cell_budget))
 
     print(f"{len(jobs_rr)} round-robin groups + {len(jobs_duel)} duel cells "
           f"on {args.workers} workers", flush=True)
 
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        rr_futures = [(job[1], pool.submit(_play_group, job)) for job in jobs_rr]
+        # Longest jobs first: a duel cell costs minutes and a round-robin group
+        # costs seconds, so submitting the duels last leaves them as a tail that
+        # runs almost serially while the rest of the pool sits idle.
         duel_futures = [(job[2], pool.submit(_duel, job)) for job in jobs_duel]
+        rr_futures = [(job[1], pool.submit(_play_group, job)) for job in jobs_rr]
 
         records = {2: [], 3: []}
         for n_seats, future in rr_futures:

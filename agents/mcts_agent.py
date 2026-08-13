@@ -12,9 +12,15 @@ greedily maximises its own component during selection. The vector length is
 taken from the game being searched, so the same agent plays both competition
 tracks (2p and 3p).
 
-Strong but slow: cost scales with ``num_simulations`` x rollout length. Tune
+The hidden plantation order is determinized **once per move**: the agent clones
+the live model once and simulates from that clone, so every simulation plays out
+the same consistent world and the actions stored in the tree stay legal in it.
+
+Strong but slow, and it has **no internal time cap** — cost is
+``num_simulations`` x rollout length regardless of the clock. Tune
 ``num_simulations`` / ``max_rollout_depth`` to your per-move time budget (the
-competition allows 1 s/move — see ``docs/COMPETITION_RULES.md``).
+competition allows 1 s/move — see ``docs/COMPETITION_RULES.md``); the default of
+200 does *not* fit that budget on a typical machine.
 """
 import math
 
@@ -109,7 +115,11 @@ class MctsAgent(Agent):
     plays both the 2p and the 3p track.
 
     Args:
-        num_simulations: rollouts per move (higher = stronger and slower).
+        num_simulations: rollouts per move (higher = stronger and slower). The
+            default is chosen to fit the competition's 1 s/move budget with room
+            to spare — measured ~0.3 s/move, where the previous default of 200
+            sat right on the limit and would time out on a slower machine, i.e.
+            the baseline would have been breaking the rule entrants must keep.
         c_uct: UCT exploration constant (default ``sqrt(2)``).
         max_rollout_depth: cap rollout length; ``None`` plays to the end.
         seed: RNG seed for reproducibility.
@@ -117,8 +127,8 @@ class MctsAgent(Agent):
 
     name = "MCTS"
 
-    def __init__(self, num_simulations: int = 200, c_uct: float = math.sqrt(2),
-                 max_rollout_depth: int = 100, seed: int = 42):
+    def __init__(self, num_simulations: int = 60, c_uct: float = math.sqrt(2),
+                 max_rollout_depth: int = 40, seed: int = 42):
         super().__init__()
         self.num_simulations = num_simulations
         self.c_uct = c_uct
@@ -138,14 +148,25 @@ class MctsAgent(Agent):
         # 3 in the 3p track) — every value vector in the tree uses this length.
         n_players = len(self._model.scores())
 
-        root = _Node(acting_player=self._model.current_player(),
+        # Determinize ONCE per move, then simulate from that world.
+        #
+        # Cloning the *live* model reshuffles the face-down plantations every
+        # time, so cloning it per simulation would put every simulation in a
+        # different world while the tree still stores actions chosen in an
+        # earlier one — "take the face-up Sugar" is not a legal move in a world
+        # that dealt Coffee there. Cloning a clone preserves the order (see
+        # ForwardModel.clone), which is exactly the self-consistency a search
+        # tree needs within one move.
+        root_model = self._model.clone()
+
+        root = _Node(acting_player=root_model.current_player(),
                      n_players=n_players)
         root.untried_actions = [int(a) for a in np.where(np.asarray(action_mask) > 0.5)[0]]
         if not root.untried_actions:
             return 15
 
         for _ in range(self.num_simulations):
-            sim = self._model.clone()
+            sim = root_model.clone()
             node = root
 
             # 1. SELECTION — descend the tree by UCT until a not-fully-expanded node

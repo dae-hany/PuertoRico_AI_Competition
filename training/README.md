@@ -30,11 +30,10 @@ greedy play, no illegal moves:
 
 An agent of average strength wins ≈ 33.3% of 3-player games.
 
-Against `MctsAgent` at the web UI's practical budget (30 simulations, rollout
-depth 40) it wins **10/12** with 58.9 VP to 30.4. That is a small sample, and
-`MctsAgent`'s default 200-simulation budget was not measured — a single game at
-that setting takes tens of minutes, which is why the web UI does not use it
-either.
+For head-to-head numbers against `MctsAgent` — and for every other baseline
+pairing — see [`../docs/BASELINES.md`](../docs/BASELINES.md), which
+`tools/measure_baselines.py` regenerates. MCTS is quoted there **with its search
+budget**, because that is what defines its strength.
 
 ## Train
 

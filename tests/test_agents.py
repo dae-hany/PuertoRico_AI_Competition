@@ -66,6 +66,44 @@ def test_actionvalue_scores_wharf_loads_at_their_real_ids():
             > h._estimate_action_value(game, 0, 15, 0.0))
 
 
+def test_search_root_is_one_consistent_world():
+    """Cloning the live model resamples the hidden pile; cloning a clone must not.
+
+    That is the property a search tree relies on — see
+    :meth:`puerto_rico.forward_model.ForwardModel.clone`.
+    """
+    from puerto_rico import ForwardModel, make_env
+
+    model = ForwardModel(make_env(seed=4, num_players=3))
+    root_model = model.clone()
+    order = [int(t) for t in root_model.game.plantation_stack]
+    for _ in range(4):
+        assert [int(t) for t in root_model.clone().game.plantation_stack] == order
+    assert any([int(t) for t in model.clone().game.plantation_stack] != order
+               for _ in range(8))
+
+
+# Seeds where re-determinizing per simulation demonstrably desynchronizes the
+# tree from the sampled deck: the agent picks a stored action ("take the face-up
+# Sugar") that the world it is now simulating never dealt, and the engine
+# refuses a move the mask had allowed. All four fail without the one-clone-per-
+# move fix in MctsAgent.act.
+@pytest.mark.parametrize("num_players,seed,sims", [(2, 6, 32), (2, 7, 32),
+                                                   (3, 2, 32), (3, 4, 32)])
+def test_mcts_determinizes_once_per_move(num_players, seed, sims):
+    agents = [MctsAgent(num_simulations=sims, max_rollout_depth=30)]
+    agents += [RandomAgent(seed=s) for s in range(num_players - 1)]
+    result = play_game(agents, seed=seed, time_limit_s=60.0)
+    assert result["illegal"][0] == 0, "MCTS played a move the engine refused"
+
+
+def test_mcts_default_budget_fits_the_competition_time_limit():
+    """The bundled baseline has to obey the rule entrants are held to."""
+    agent = MctsAgent()
+    assert agent.num_simulations <= 60, (
+        "the default budget must leave headroom under 1 s/move on a slow machine")
+
+
 def test_shippingrush_scores_wharf_loads_at_their_real_ids():
     # Same class of bug as the ActionValue regression above: the Wharf branch
     # scored actions 74-78, which the env never emits, so it could never fire —
