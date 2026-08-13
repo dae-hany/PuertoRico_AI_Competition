@@ -462,7 +462,3 @@ class ShippingRushAgent(Agent):
 
         chosen_act = int(np.argmax(priority))
         return int(chosen_act)
-
-
-# Backward compatibility alias (deprecated - will be removed in future versions)
-AdvancedRuleBasedAgent = ShippingRushAgent

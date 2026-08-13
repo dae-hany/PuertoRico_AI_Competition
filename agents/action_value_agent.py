@@ -948,8 +948,3 @@ class ActionValueAgentSimple(ActionValueAgent):
                                 base_heuristic: float) -> float:
         """Simply return base heuristic with small random tie-breaking."""
         return base_heuristic + self._rng.uniform(0, 0.001)
-
-
-# Backward compatibility aliases (deprecated - will be removed in future versions)
-DaehanHeuristicAgent = ActionValueAgent
-DaehanHeuristicAgentSimple = ActionValueAgentSimple

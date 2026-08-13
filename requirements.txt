@@ -5,7 +5,8 @@ pettingzoo>=1.24,<1.25      # AgentSelector API; verified on 1.24.x
 trueskill>=0.4.5            # TrueSkill leaderboard metric
 
 # Reinforcement-learning baseline + training — optional
-# (only needed for agents/ppo_agent.py and training/train_ppo.py)
+# (only needed for agents/ppo_agent.py and training/train_ppo.py;
+#  with pyproject: pip install -e ".[rl]")
 torch>=1.13
 
 # Web debug UI — optional (webui/server.py)

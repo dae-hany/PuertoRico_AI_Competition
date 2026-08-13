@@ -2,7 +2,18 @@
 
 This folder holds the PPO self-play trainer used to produce the learned baseline.
 It is **optional** — the competition only needs the core package, the baselines,
-and the tournament.
+and the tournament. It needs PyTorch: `pip install -e ".[rl]"`.
+
+The trainer works for **either track**: `--num_players 3` (default) or
+`--num_players 2`. The observation width follows from the seat count
+(`74 + 73 × num_players`, so 293 or 220), and `PpoAgent` reads that width back
+out of the checkpoint — but **a checkpoint only plays the track it was trained
+on**. The bundled `checkpoints/ppo_baseline.pt` is a **3p** run; the 2p track has
+no shipped RL baseline, which makes it an open target for entrants.
+
+```bash
+python training/train_ppo.py --num_players 2 --out_dir results/ppo_2p
+```
 
 `checkpoints/ppo_baseline.pt` is 5M steps of parameter-sharing self-play
 (~2.6 h on 8 CPU threads). Measured over 60 seat-rotated 3p games per matchup,
@@ -99,7 +110,8 @@ policy scores ≈ 0.33.)
 
 ## Files
 
-- `train_ppo.py` — PPO self-play training loop (parameter-sharing, 3 agents).
+- `train_ppo.py` — PPO self-play training loop (parameter-sharing; `--num_players`
+  picks the track).
 - `wrapper.py` — flattens (and rotates) the env observation for the network.
 - `random_bot.py` — a random opponent used by evaluation and the
   `fixed_random` training mode.

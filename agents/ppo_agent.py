@@ -6,11 +6,14 @@ agents/ppo_agent.py — PPO self-play network + inference agent.
 the highest-probability *legal* action. This is the only baseline that needs
 PyTorch.
 
-The bundled checkpoint is 5M steps of parameter-sharing self-play and beats every
-heuristic baseline head-to-head in the 3p track (e.g. 90% over 60 seat-rotated
-games against :class:`~agents.action_value_agent.ActionValueAgent`). It is
-**3p-only** — the network is 293-dim, so the 2p track needs its own 220-dim run.
-See ``training/README.md`` for the measured table and how to train your own.
+The network itself is track-agnostic — its input width is just
+``74 + 73 * num_players`` — but **a checkpoint only plays the track it was
+trained on**: 220-dim weights for the 2p track, 293-dim for 3p. ``PpoAgent``
+reads the width out of the checkpoint, so you never have to state it.
+
+The bundled checkpoint is 5M steps of parameter-sharing self-play **in the 3p
+track**. Train a 2p one with ``python training/train_ppo.py --num_players 2``;
+see ``training/README.md``.
 """
 import numpy as np
 import torch
@@ -111,12 +114,13 @@ class PpoAgent(Agent):
 
     name = "PPO"
 
-    def __init__(self, checkpoint_path: str = None, obs_dim: int = OBS_DIM,
+    def __init__(self, checkpoint_path: str = None, obs_dim: int = None,
                  action_dim: int = ACTION_DIM, device: str = "cpu",
                  egocentric: bool = None):
         super().__init__()
         self.device = device
-        self.net = PpoNetwork(obs_dim, action_dim).to(device)
+
+        state = None
         ckpt_egocentric = True           # what train_ppo.py produces today
         if checkpoint_path is not None:
             ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -127,11 +131,25 @@ class PpoAgent(Agent):
             else:
                 state = ckpt          # bare state_dict: legacy encoding
                 ckpt_egocentric = False
+            if obs_dim is None:
+                # Take the track from the weights rather than assuming 3p: a 2p
+                # checkpoint is 220-dim and would not load into a 293-dim net.
+                obs_dim = int(state["embed.0.weight"].shape[1])
+
+        self.obs_dim = obs_dim if obs_dim is not None else OBS_DIM
+        self.net = PpoNetwork(self.obs_dim, action_dim).to(device)
+        if state is not None:
             self.net.load_state_dict(state)
         self.egocentric = ckpt_egocentric if egocentric is None else egocentric
         self.net.eval()
 
     def act(self, observation: np.ndarray, action_mask: np.ndarray) -> int:
+        if len(observation) != self.obs_dim:
+            raise ValueError(
+                f"this checkpoint plays the "
+                f"{(self.obs_dim - 74) // 73}p track (obs {self.obs_dim}), but it "
+                f"was given a {len(observation)}-dim observation. A checkpoint is "
+                f"only valid for the track it was trained on.")
         if self.egocentric:
             # act() is only ever called on our turn, so the observation's
             # current_player field identifies us — no seat index needed.

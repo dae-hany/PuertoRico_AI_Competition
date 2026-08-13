@@ -1,5 +1,5 @@
 """
-tournament/rankers/trueskill_ranker.py — TrueSkill rating (secondary metric).
+tournament/rankers/trueskill_ranker.py — the OFFICIAL metric of the 3p track.
 
 TrueSkill (Herbrich et al., 2006) is a Bayesian skill-rating system designed for
 free-for-all games with more than two players — a natural fit for 3-player

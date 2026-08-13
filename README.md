@@ -26,8 +26,9 @@ engine, the agents, the docs — is in English so anyone can take part.
 ```bash
 git clone <this-repo>
 cd PuertoRico_AI_Competition
-python -m venv .venv && . .venv/Scripts/activate     # Windows: .venv\Scripts\activate
+python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e .                        # installs deps + makes the packages importable
+pip install -e ".[rl]"                  # optional: adds PyTorch for the PPO baseline
 
 python examples/play_one_game.py        # one baseline game per track (2p and 3p)
 python examples/run_tournament.py       # a round-robin + leaderboard for each track
@@ -82,8 +83,9 @@ The heuristic baselines (`ActionValue`, `ShippingRush`, `TradeBuilding`,
 unchanged, and so does `MctsAgent` (its Max^N value vectors are sized from the
 game it is handed). `SearchAgent` / `SearchLiteAgent` are **2p-focused** — they
 search the 1‑vs‑1 game and fall back to a reactive heuristic in a 3p game. The
-bundled PPO checkpoint is **3p-only** (293-dim); a 2p PPO agent would need its
-own 220-dim training run.
+bundled PPO checkpoint is **3p-only** (293-dim) — the trainer supports both
+tracks (`--num_players 2`), so the 2p track has **no shipped RL baseline**, which
+is an open target for entrants.
 `PpoAgent` is the target to beat in the 3p track — see
 [`training/README.md`](training/README.md) for its measured results against every
 other baseline, and for how to train your own.

@@ -14,11 +14,14 @@ dependencies = [
     "gymnasium>=0.28",
     "pettingzoo>=1.24,<1.25",
     "trueskill>=0.4.5",
-    "torch>=1.13",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+# PyTorch is genuinely optional: the package imports PpoAgent lazily so the
+# engine, the heuristics and the tournament all run without it. Install the
+# `rl` extra to use the PPO baseline or to train your own.
+rl = ["torch>=1.13"]
+dev = ["pytest", "torch>=1.13"]
 webui = ["flask>=2.0"]
 
 [tool.setuptools]

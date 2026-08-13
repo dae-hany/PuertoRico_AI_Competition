@@ -1,8 +1,10 @@
+import importlib.util
+
 import numpy as np
 import pytest
 
-from agents import (ActionValueAgent, FactoryAgent, MctsAgent, PpoAgent,
-                    RandomAgent, ShippingRushAgent, TradeBuildingAgent)
+from agents import (ActionValueAgent, FactoryAgent, MctsAgent, RandomAgent,
+                    SearchLiteAgent, ShippingRushAgent, TradeBuildingAgent)
 from tournament.match import play_game
 
 AGENT_FACTORIES = [
@@ -12,8 +14,12 @@ AGENT_FACTORIES = [
     ("TradeBuilding", TradeBuildingAgent),
     ("Factory", FactoryAgent),
     ("MCTS", lambda: MctsAgent(num_simulations=8, max_rollout_depth=20)),
-    ("PPO", PpoAgent),                      # untrained network, but must play legally
+    ("SearchLite", SearchLiteAgent),
 ]
+
+if importlib.util.find_spec("torch") is not None:    # torch is an optional extra
+    from agents import PpoAgent
+    AGENT_FACTORIES.append(("PPO", PpoAgent))        # untrained, but must play legally
 
 
 # Every baseline except PPO plays both tracks; the bundled PPO checkpoint is
@@ -108,6 +114,45 @@ def test_factory_reads_real_ship_capacities():
 
     assert action == 49
     assert score == 6 * 10 + 6, "ship 1 holds 6 in the 2p track, not 5"
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None,
+                    reason="PPO needs the optional torch extra")
+def test_ppo_checkpoint_carries_its_own_track():
+    """A checkpoint is only valid for the track it was trained on, so the agent
+    must read the width out of the weights instead of assuming 3p — and say so
+    clearly when it is handed the other track's observation."""
+    import torch
+
+    from agents.ppo_agent import PpoAgent, PpoNetwork
+
+    for num_players, obs_dim in ((2, 220), (3, 293)):
+        net = PpoNetwork(obs_dim=obs_dim)
+        path = tmp_checkpoint(net, num_players)
+        agent = PpoAgent(path)
+        assert agent.obs_dim == obs_dim
+
+        good = np.zeros(obs_dim, dtype=np.float32)
+        mask = np.zeros(200, dtype=np.int8)
+        mask[15] = 1
+        assert agent.act(good, mask) == 15
+
+        wrong = np.zeros(293 if obs_dim == 220 else 220, dtype=np.float32)
+        with pytest.raises(ValueError, match="track"):
+            agent.act(wrong, mask)
+
+
+def tmp_checkpoint(net, num_players):
+    import tempfile
+
+    import torch
+
+    handle = tempfile.NamedTemporaryFile(suffix=".pt", delete=False)
+    handle.close()
+    torch.save({"model_state": net.state_dict(),
+                "args": {"egocentric": True, "num_players": num_players}},
+               handle.name)
+    return handle.name
 
 
 def test_actionvalue_beats_random():

@@ -373,8 +373,9 @@ class PuertoRicoGame:
                 self.players[self.current_player_idx].recall_all_colonists()
         else:
             self.players_taken_action += 1
-            # 중복 사용 방지 : 한 플레이어가 자신의 한 차례에 하시엔다를 두 번 쓰는 것을 막음
-            # 다음 플레이어 배려 : 다음 플레이어도 하시엔다를 가지고 있다면 그 플레이어가 정상적으로 자신의 하시엔다 능력을 사용
+            # Cleared per turn, not per phase: it stops one player using their
+            # Hacienda twice in their own turn, while still letting the next
+            # player use theirs.
             self._hacienda_used = False
             if self.players_taken_action >= self.num_players:
                 # Phase is over
