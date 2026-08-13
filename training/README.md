@@ -16,19 +16,24 @@ python training/train_ppo.py --num_players 2 --out_dir results/ppo_2p
 ```
 
 `checkpoints/ppo_baseline.pt` is 5M steps of parameter-sharing self-play
-(~2.6 h on 8 CPU threads). Measured over 60 seat-rotated 3p games per matchup,
-greedy play, no illegal moves:
+(~2.6 h on 8 CPU threads) in the **3p** track. Against each heuristic, greedy
+play, seat-balanced, 24 games per matchup:
 
-| PPO (player) vs 2× | win rate | PPO mean VP | opponent mean VP |
-|---|---:|---:|---:|
-| `RandomAgent` | 100.0% | 69.5 | 25.2 |
-| `FactoryAgent` | 100.0% | 79.8 | 22.7 |
-| `TradeBuildingAgent` | 93.3% | 44.4 | 23.4 |
-| `ShippingRushAgent` | 88.3% | 53.3 | 28.0 |
-| `ActionValueAgent` | 90.0% | 51.2 | 32.2 |
-| `ActionValue` + `ShippingRush` | 98.3% | 54.1 | — |
+| PPO vs 2× | win rate |
+|---|---:|
+| `RandomAgent` | 100% |
+| `FactoryAgent` | 100% |
+| `TradeBuildingAgent` | 100% |
+| `ShippingRushAgent` | 83% |
+| `ActionValueAgent` | 83% |
 
-An agent of average strength wins ≈ 33.3% of 3-player games.
+An agent of average strength wins ≈ 33.3% of 3-player games, so PPO is the agent
+to beat in the 3p track. These numbers come from
+[`../docs/BASELINES.md`](../docs/BASELINES.md); regenerate them with
+`python tools/measure_baselines.py` after changing anything that could move
+them. (The table published before that tool existed was measured on an engine
+and a set of baselines that have since been corrected — see
+[`../CHANGES.md`](../CHANGES.md) — so it is not comparable.)
 
 For head-to-head numbers against `MctsAgent` — and for every other baseline
 pairing — see [`../docs/BASELINES.md`](../docs/BASELINES.md), which

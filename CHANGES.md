@@ -59,6 +59,29 @@ Tests: 35 → 76.
   each move that the real game — hidden draw order included — is untouched,
   reporting breaches as `tampered`. `tournament/match.py`
 
+### A game the field would not end
+
+`python examples/run_tournament.py` — the command the README tells entrants to
+run — hung forever, and had done since before this pass.
+
+The round-robin plays every group, self-matches included, and a table of three
+`FactoryAgent`s never finishes. Puerto Rico ends when the VP chips, the colonist
+supply, or a player's city runs out, and *which* of those drains depends on the
+roles the agents pick. Factory wanted the Mayor only once it already held
+colonists — circular, since the Mayor phase is the only source of them. Three
+agents reasoning that way never pick it: measured 734 rounds, Mayor chosen 3
+times, one player with an empty city. Fixed on both sides, because either alone
+leaves the competition exposed:
+
+* Factory values the Mayor when it has **empty colonist slots** (as ShippingRush
+  already did). All-Factory games now end in 159–331 decisions in both tracks.
+* `play_game` caps a game at `max_steps` (4000, ~8x the longest game seen between
+  baselines), scores it where it stands and flags `truncated`. An organizer must
+  not be able to lose a tournament to one submission's choice of roles, and no
+  amount of fixing the bundled agents guarantees that for agents nobody has seen
+  yet. `tournament/match.py`, test:
+  `tests/test_tournament.py::test_every_baseline_self_match_finishes`
+
 ### Agents
 
 * **MCTS determinized once per *simulation* instead of once per move.** Cloning
@@ -102,3 +125,14 @@ Tests: 35 → 76.
   claims in those documents had drifted apart from each other (the submission
   guide ranked PPO next to Random while the README called it the strongest 3p
   baseline) and could not be checked without re-running games by hand.
+* What the first measured run (500 games in 2p, 1000 in 3p) showed, against
+  what the docs had asserted:
+  - The **heuristic ordering differs between the tracks**, which no document
+    mentioned: `TradeBuilding` leads 1‑vs‑1 (Elo 1841) but is third in 3p, where
+    `ShippingRush` leads. Tuning one agent for both tracks is a real trade-off.
+  - `ShippingRush` was described as "strong"; it is **last but one** among the
+    heuristics in 2p (Elo 1345, below `Factory`).
+  - `Factory` was described as "weak"; it is **third** in 2p.
+  - `SearchLite` was described as "clearly beatable"; it beats **every** bundled
+    heuristic (88–100%). Relative to `SearchAgent`, not to the field.
+  - `Search` tops 2p and `PPO` tops 3p, as claimed — those two held up.

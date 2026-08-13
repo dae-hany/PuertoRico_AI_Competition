@@ -225,10 +225,12 @@ class SearchLiteAgent(SearchAgent):
     """A lighter, beginner-friendly tier of :class:`SearchAgent`.
 
     Same alpha-beta engine, but a small node budget so it searches only a few
-    plies. It plays soundly and punishes blunders, yet is clearly beatable with
-    good play — a reasonable first target for competition entrants, and a fast,
-    deterministic reference opponent (identical strength on any hardware). Beat
-    this comfortably, then aim at the full :class:`SearchAgent`.
+    plies — fast (~0.04 s/move) and, like its parent, identical in strength on
+    any hardware.
+
+    "Lighter" is relative to :class:`SearchAgent`, not to the field: measured, it
+    still beats every bundled heuristic (88-100%, see ``docs/BASELINES.md``). It
+    is the second rung of a ladder whose first rung is ``ActionValueAgent``.
     """
 
     name = "SearchLite"
