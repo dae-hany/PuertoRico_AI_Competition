@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "numpy>=1.21",
     "gymnasium>=0.28",
-    "pettingzoo>=1.24,<1.25",
+    "pettingzoo>=1.24,<1.26",
     "trueskill>=0.4.5",
 ]
 

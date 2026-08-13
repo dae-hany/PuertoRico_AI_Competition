@@ -122,5 +122,6 @@ policy scores ≈ 0.33.)
 - `checkpoints/ppo_baseline.pt` — the bundled baseline that `PpoAgent` and the
   web UI load by default.
 
-> Note: the `--env_mode aoe_ablation` option from the research code is not
-> shipped here; use the default `standard` mode.
+> Note: the research code's AOE-ablation environment is not part of this repo.
+> The `--env_mode` flag that used to offer it has been removed — it imported a
+> module that does not ship, so selecting it only ever raised `ModuleNotFoundError`.

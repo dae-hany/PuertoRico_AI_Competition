@@ -78,13 +78,9 @@ def obs_dim_for(num_players: int) -> int:
 
 # ── environment factory ────────────────────────────────────────────────────────
 
-def make_env(obs_mode: str = 'full', env_mode: str = 'standard',
-             egocentric: bool = True, num_players: int = 3):
-    if env_mode == 'aoe_ablation':
-        from env.aoe_ablation_env import AOEAblationEnv
-        env = AOEAblationEnv(num_players=num_players, random_seed_mode=True)
-    else:
-        env = PuertoRicoEnv(num_players=num_players, random_seed_mode=True)
+def make_env(obs_mode: str = 'full', egocentric: bool = True,
+             num_players: int = 3):
+    env = PuertoRicoEnv(num_players=num_players, random_seed_mode=True)
     return CleanRLAECWrapper(env, obs_mode=obs_mode, egocentric=egocentric)
 
 
@@ -344,7 +340,7 @@ def ppo_update(agent, optimizer, obs_buf, act_buf, logp_buf, adv_buf, ret_buf,
 # ── in-training evaluation (PPO vs Random × 2) ────────────────────────────────
 
 def run_eval(agent, n_episodes: int, device: str, obs_mode: str = 'full',
-             env_mode: str = 'standard', egocentric: bool = True,
+             egocentric: bool = True,
              greedy: bool = True, num_players: int = 3) -> dict:
     """Run n_episodes of PPO (player_0) vs RandomBots. Returns stats dict.
 
@@ -354,7 +350,7 @@ def run_eval(agent, n_episodes: int, device: str, obs_mode: str = 'full',
     """
     random_agents = [RandomBot() for _ in range(num_players - 1)]
     wins, vps, ep_lens = [], [], []
-    env = make_env(obs_mode=obs_mode, env_mode=env_mode, egocentric=egocentric,
+    env = make_env(obs_mode=obs_mode, egocentric=egocentric,
                    num_players=num_players)
 
     for _ in range(n_episodes):
@@ -457,7 +453,7 @@ def train(args):
     )
 
     # Build envs once; they persist across rollouts (episodes are not restarted).
-    runners = [EnvRunner(make_env(obs_mode=args.obs_mode, env_mode=args.env_mode,
+    runners = [EnvRunner(make_env(obs_mode=args.obs_mode,
                                   egocentric=args.egocentric,
                                   num_players=args.num_players),
                          n_players=args.num_players)
@@ -565,10 +561,10 @@ def train(args):
             # alongside it so a degenerate argmax is distinguishable from a
             # genuinely weak policy.
             stats = run_eval(agent, args.eval_episodes, device, obs_mode=args.obs_mode,
-                             env_mode=args.env_mode, egocentric=args.egocentric,
+                             egocentric=args.egocentric,
                              greedy=True, num_players=args.num_players)
             samp  = run_eval(agent, args.eval_episodes, device, obs_mode=args.obs_mode,
-                             env_mode=args.env_mode, egocentric=args.egocentric,
+                             egocentric=args.egocentric,
                              greedy=False, num_players=args.num_players)
             elapsed_eval = time.time() - t_eval
             with open(eval_csv, "a", newline="") as f:
@@ -666,10 +662,6 @@ def parse_args():
                    choices=["self_play", "fixed_random"],
                    help="self_play: shared policy for all agents (standard self-play); "
                         "fixed_random: only player_0 trained, opponents are fixed RandomBot")
-    p.add_argument("--env_mode",        type=str, default="standard",
-                   choices=["standard", "aoe_ablation"],
-                   help="standard: original Puerto Rico; "
-                        "aoe_ablation: selector-only phases (AOE ablated)")
     return p.parse_args()
 
 

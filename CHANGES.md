@@ -113,6 +113,14 @@ leaves the competition exposed:
 
 ### Training
 
+* **`--env_mode aoe_ablation` removed.** It imported `env.aoe_ablation_env`,
+  which this repo does not ship, so choosing it raised `ModuleNotFoundError` —
+  a flag `--help` advertised and that could never work.
+* **PBRS wrapper made correct** (unused by the bundled trainer, but kept honest):
+  `gamma` 0.99 → 1.0, so it matches the discount the trainer actually uses, and
+  Φ(terminal) is now 0. Potential-based shaping only leaves the optimal policy
+  unchanged if both hold; with neither, the wrapper silently was not
+  potential-based shaping. Same fix as the research engine's D10.
 * **The trainer supports both tracks** (`--num_players {2,3}`); the observation
   width follows from the seat count. `PpoAgent` reads that width out of the
   checkpoint instead of assuming 3p, and says so clearly when handed the other
