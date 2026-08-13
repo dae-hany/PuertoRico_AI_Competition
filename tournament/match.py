@@ -74,8 +74,11 @@ def _finishing_ranks(vp, tiebreak):
     return ranks
 
 
+MAX_STEPS = 4000            # ~8x the longest game observed between baselines
+
+
 def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
-              check_tampering: bool = True) -> dict:
+              check_tampering: bool = True, max_steps: int = MAX_STEPS) -> dict:
     """Play one game between ``agents`` (a list of :class:`Agent` instances).
 
     The seat count is ``len(agents)`` — 2 for the 1-vs-1 track, 3 for the 3p
@@ -88,11 +91,18 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
         check_tampering: verify after every move that the agent left the real
             game untouched, and count the breaches in ``tampered``. Cheap (one
             extra observation per move); turn it off only for profiling.
+        max_steps: hard cap on decisions. Puerto Rico ends on its own, but only
+            if *somebody* moves the game along, and agents choose the roles. A
+            table that never picks the Mayor never spends a colonist, so the
+            colonist supply — one of the three end triggers — never drains, and
+            the game runs for ever. That is a legal, if useless, way to play, so
+            the harness bounds it rather than trusting the field: on reaching
+            the cap the game is scored where it stands and flagged ``truncated``.
 
     Returns:
         dict with ``scores``, ``tiebreak``, ``ranks`` (0 = best), ``winners``,
         ``steps``, ``timeouts``, ``illegal``, ``tampered`` (per-player counts),
-        and ``seed``.
+        ``truncated``, and ``seed``.
     """
     n = len(agents)
     env = make_env(seed=seed, num_players=n)
@@ -111,7 +121,7 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
     tampered = [0] * n
     steps = 0
 
-    while env.agents:
+    while env.agents and steps < max_steps:
         name = env.agent_selection
         if env.terminations.get(name, False) or env.truncations.get(name, False):
             env.step(None)
@@ -150,6 +160,8 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
         env.step(action)
         steps += 1
 
+    truncated = bool(env.agents)          # hit the cap instead of ending naturally
+
     scores = env.unwrapped.game.get_scores()
     vp = [int(s[0]) for s in scores]
     tiebreak = [int(s[1]) for s in scores]
@@ -169,4 +181,5 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
         "timeouts": timeouts,
         "illegal": illegal,
         "tampered": tampered,
+        "truncated": truncated,
     }

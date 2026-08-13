@@ -1,6 +1,44 @@
-from agents import ActionValueAgent, RandomAgent, TradeBuildingAgent
+import pytest
+
+from agents import (ActionValueAgent, FactoryAgent, RandomAgent,
+                    ShippingRushAgent, TradeBuildingAgent)
 from tournament.leaderboard import build_leaderboard
+from tournament.match import play_game
 from tournament.runner import run_tournament
+
+SELF_MATCH_BASELINES = [
+    ("Random", lambda: RandomAgent(seed=0)),
+    ("Factory", FactoryAgent),
+    ("TradeBuilding", TradeBuildingAgent),
+    ("ShippingRush", ShippingRushAgent),
+    ("ActionValue", ActionValueAgent),
+]
+
+
+@pytest.mark.parametrize("name,make", SELF_MATCH_BASELINES)
+@pytest.mark.parametrize("n_seats", [2, 3])
+def test_every_baseline_self_match_finishes(name, make, n_seats):
+    """The round-robin plays groups like [A, A, A], so a baseline has to be able
+    to finish a game against itself.
+
+    Puerto Rico only ends when somebody spends the resources that trigger the
+    end, and the agents choose the roles. A table that never picks the Mayor
+    never spends a colonist and plays for ever: an all-Factory 3-player game ran
+    734 rounds having chosen the Mayor 3 times, which meant the shipped
+    `examples/run_tournament.py` hung.
+    """
+    result = play_game([make() for _ in range(n_seats)], seed=300_000,
+                       time_limit_s=30.0)
+    assert not result["truncated"], f"{name} x{n_seats} did not finish on its own"
+
+
+def test_harness_caps_a_game_that_will_not_end():
+    """Whatever the field does, one match must not be able to hang the run."""
+    result = play_game([RandomAgent(seed=1), RandomAgent(seed=2)], seed=0,
+                       max_steps=25)
+    assert result["truncated"]
+    assert result["steps"] == 25
+    assert len(result["winners"]) >= 1        # still scoreable where it stands
 
 
 def _small_pool():

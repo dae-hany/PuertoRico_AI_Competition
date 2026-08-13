@@ -384,6 +384,14 @@ class FactoryAgent(Agent):
         cargo_ships_load = np.array([s.current_load for s in game.cargo_ships])
         cargo_ships_cap  = np.array([s.capacity for s in game.cargo_ships])
 
+        # Colonist slots standing empty right now (plantations + building spaces).
+        vacant_slots = (
+            sum(BUILDING_DATA[b.building_type][2] - b.colonists for b in p.city_board
+                if b.building_type not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE))
+            + sum(1 for t in p.island_board
+                  if t.tile_type != TileType.EMPTY and not t.is_occupied)
+        )
+
         tile_counts = self._tile_counts(island_tiles)
         num_plantations = sum(tile_counts.values())
         has_factory = self._has(city_b, BuildingType.FACTORY)
@@ -482,11 +490,22 @@ class FactoryAgent(Agent):
                 else:
                     priority[3] = 40.0   # Low if no production
 
-            # Mayor: place colonists when needed
-            if unplaced_col > 0 and mask[1]:
-                priority[1] = 130.0
-            elif mask[1]:
-                priority[1] = 50.0
+            # Mayor: place colonists when needed.
+            #
+            # "Needed" has to include *empty slots*, not just colonists already
+            # in hand. Wanting the Mayor only once you hold colonists is
+            # circular — the Mayor phase is the only thing that hands them out —
+            # and a table of agents that all reason that way never picks it: no
+            # colonist is ever spent, so the colonist supply (one of the three
+            # end triggers) never drains and the game does not end. A 3-player
+            # all-Factory game ran 734 rounds having chosen the Mayor 3 times.
+            if mask[1]:
+                if unplaced_col > 0:
+                    priority[1] = 130.0
+                elif vacant_slots > 0:
+                    priority[1] = 145.0    # nothing on the board works unstaffed
+                else:
+                    priority[1] = 50.0
             
             # Captain: Use opponent awareness - pre-empt if opponent has more goods
             if mask[5]:
