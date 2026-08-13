@@ -76,10 +76,14 @@ class FactoryAgent(Agent):
 
     name = "Factory"
 
-    def __init__(self, action_dim: int = 200):
+    def __init__(self, action_dim: int = 200, seed: int = 0):
         super().__init__()
         self.action_dim = action_dim
         self._env = None
+        # Private RNG for tie-breaking noise. It used to draw from the global
+        # `np.random` state, which was reproducible only by accident: the env's
+        # reset() re-seeded that global state at every game.
+        self._rng = np.random.default_rng(seed)
 
     def on_game_start(self, forward_model=None):
         self._env = forward_model
@@ -132,23 +136,12 @@ class FactoryAgent(Agent):
             and not self._has(city_b, bldg)
         ]
 
-    @staticmethod
-    def _starting_with_corn(island_tiles: np.ndarray) -> bool:
-        """True if only plantation is corn (corn-start scenario)."""
-        tile_vals = [_iv(t) for t in island_tiles if _iv(t) <= 5]
-        return (
-            tile_vals.count(int(TileType.CORN_PLANTATION)) > 0
-            and tile_vals.count(int(TileType.INDIGO_PLANTATION)) == 0
-            and len(tile_vals) <= 2
-        )
-
     # ── Building selection ────────────────────────────────────────────────────
 
     def _choose_building(self, doubloons: int, city_b: np.ndarray,
                           has_factory: bool, has_harbor: bool,
                           factory_active: bool,
                           unmatched: list[int],
-                          corn_start_no_small_market: bool,
                           has_sm_mkt: bool = False,
                           num_prod_buildings: int = 0) -> BuildingType | None:
         """
@@ -212,50 +205,41 @@ class FactoryAgent(Agent):
     def _settler_action(self, mask: np.ndarray, face_up: np.ndarray,
                         tile_counts: dict[int, int]) -> int | None:
         """
-        If have Settler privilege (action 14 available): always take Quarry.
-        Otherwise: pick from face-up tiles according to priority,
-                   skipping types we already hold in target quantity.
-        """
-        # Settler privilege → Quarry
-        if mask[14]:
-            return 14
+        Take a Quarry when one is offered (role privilege or Construction Hut);
+        otherwise pick a face-up tile by priority, skipping types we already
+        hold in the target quantity.
 
-        # Build priority list: tile types we still need more of
-        wanted = []
-        for tile_t in _SETTLER_PREF:
-            have = tile_counts.get(tile_t, 0)
-            need = _TARGET_COUNTS.get(tile_t, 1)
-            if have < need:
-                wanted.append(tile_t)
+        Action encoding (docs/OBSERVATION_AND_ACTIONS.md): a face-up plantation
+        is chosen **by tile type** (`8 + TileType`), not by its position in the
+        face-up row, and the Quarry is action **13**. This used to read `14` for
+        the Quarry and `8 + slot_index` for plantations — the first is not an
+        action the env ever emits, and the second asked for whichever crop
+        happened to share an index with the slot, so the whole preference order
+        was applied to the wrong tiles.
+        """
+        if mask[13]:
+            return 13
+
+        available = {_iv(ft) for ft in face_up}
+        wanted = [t for t in _SETTLER_PREF
+                  if tile_counts.get(t, 0) < _TARGET_COUNTS.get(t, 1)]
 
         for tile_t in wanted:
-            for slot_idx, ft in enumerate(face_up):
-                if _iv(ft) == tile_t and mask[8 + slot_idx]:
-                    return 8 + slot_idx
+            if tile_t in available and mask[8 + tile_t]:
+                return 8 + tile_t
 
-        # Fallback: any available face-up tile
-        for slot_idx in range(len(face_up)):
-            if mask[8 + slot_idx]:
-                return 8 + slot_idx
+        # Fallback: any face-up tile that is legal right now, best-value first.
+        for tile_t in _SETTLER_PREF:
+            if tile_t in available and mask[8 + tile_t]:
+                return 8 + tile_t
 
         return None
 
-    # ── Mayor strategy ────────────────────────────────────────────────────────
-
-    def _mayor_action(self, mask: np.ndarray, harbor_active: bool) -> int | None:
-        """
-        Pre-Harbor:  BUILDING_FOCUS (71) → fill production buildings + Factory
-        Post-Harbor: TRADE_FACTORY_FOCUS (70) → then CAPTAIN_FOCUS (69) for Harbor VP
-        """
-        if harbor_active:
-            for a in (69, 70, 71):
-                if mask[a]:
-                    return a
-        else:
-            for a in (71, 70, 69):
-                if mask[a]:
-                    return a
-        return None
+    # (A `_mayor_action` helper used to live here, choosing between the
+    # per-phase "Mayor strategy" actions 69/70/71. The env replaced those with
+    # per-colonist placement (120-125 island, 140-162 city) long ago, so the
+    # helper could never fire and nothing called it. Colonist placement is
+    # scored inline in `act` instead.)
 
     # ── Active production check ───────────────────────────────────────────────
 
@@ -311,18 +295,22 @@ class FactoryAgent(Agent):
     def _get_best_shipping_action(self, mask: np.ndarray, goods: np.ndarray,
                                    cargo_ships_good: np.ndarray,
                                    cargo_ships_load: np.ndarray,
+                                   cargo_ships_capacity: np.ndarray,
                                    has_harbor: bool) -> tuple[int, float]:
-        """Find the best shipping action that maximizes VP."""
-        ship_capacities = [4, 5, 6]
+        """Find the best shipping action that maximizes VP.
+
+        Capacities come from the live game, not a hard-coded ``[4, 5, 6]``: the
+        2p track has **two** ships of 4/6, so the old constant invented a third
+        ship and gave ship 1 one slot too many.
+        """
         best_action = -1
         best_score = 0.0
-        
-        for ship_idx in range(3):
+
+        for ship_idx in range(len(cargo_ships_capacity)):
             ship_good = _iv(cargo_ships_good[ship_idx])
             ship_load = _iv(cargo_ships_load[ship_idx])
-            ship_cap = ship_capacities[ship_idx] if ship_idx < len(ship_capacities) else 6
-            ship_space = ship_cap - ship_load
-            
+            ship_space = _iv(cargo_ships_capacity[ship_idx]) - ship_load
+
             if ship_space <= 0:
                 continue
             
@@ -373,7 +361,7 @@ class FactoryAgent(Agent):
         player_idx = game.current_player_idx if game is not None else None
 
         if game is None or player_idx is None:
-            priority += np.random.uniform(0, 0.05, self.action_dim)
+            priority += self._rng.uniform(0, 0.05, self.action_dim)
             priority[mask == 0] = -1e9
             return int(np.argmax(priority))
 
@@ -394,6 +382,7 @@ class FactoryAgent(Agent):
         
         cargo_ships_good = np.array([s.good_type.value if s.good_type is not None else 5 for s in game.cargo_ships])
         cargo_ships_load = np.array([s.current_load for s in game.cargo_ships])
+        cargo_ships_cap  = np.array([s.capacity for s in game.cargo_ships])
 
         tile_counts = self._tile_counts(island_tiles)
         num_plantations = sum(tile_counts.values())
@@ -411,11 +400,11 @@ class FactoryAgent(Agent):
 
         target_now = self._choose_building(
             doubloons, city_b, has_factory, has_harbor,
-            factory_act, unmatched, False, has_sm_mkt, num_prod_buildings
+            factory_act, unmatched, has_sm_mkt, num_prod_buildings
         )
         target_with_discount = self._choose_building(
             doubloons + 1, city_b, has_factory, has_harbor,
-            factory_act, unmatched, False, has_sm_mkt, num_prod_buildings
+            factory_act, unmatched, has_sm_mkt, num_prod_buildings
         )
 
         trade_actions = self._tradeable_actions(goods, trading_house)
@@ -539,7 +528,8 @@ class FactoryAgent(Agent):
 
         # Captain shipping: Use optimized shipping action selection
         best_ship_action, ship_score = self._get_best_shipping_action(
-            mask, goods, cargo_ships_good, cargo_ships_load, has_harbor or harbor_act
+            mask, goods, cargo_ships_good, cargo_ships_load, cargo_ships_cap,
+            has_harbor or harbor_act
         )
         if best_ship_action >= 0:
             priority[best_ship_action] = 300.0 + ship_score
@@ -585,7 +575,7 @@ class FactoryAgent(Agent):
                     base = 235.0
                 else:
                     base = 230.0
-                priority[act_isl] = base + np.random.uniform(0, 5.0)
+                priority[act_isl] = base + self._rng.uniform(0, 5.0)
 
         for b_val in range(23):
             act_city = 140 + b_val
@@ -598,10 +588,10 @@ class FactoryAgent(Agent):
                     base = 250.0 if harbor_act else 240.0
                 elif b_type in [BuildingType.SMALL_INDIGO_PLANT, BuildingType.INDIGO_PLANT, BuildingType.SMALL_SUGAR_MILL, BuildingType.SUGAR_MILL, BuildingType.TOBACCO_STORAGE, BuildingType.COFFEE_ROASTER]:
                     base = 245.0
-                priority[act_city] = base + np.random.uniform(0, 5.0)
+                priority[act_city] = base + self._rng.uniform(0, 5.0)
 
         # ── Finalize ─────────────────────────────────────────────────────────
-        priority += np.random.uniform(0, 0.05, self.action_dim)
+        priority += self._rng.uniform(0, 0.05, self.action_dim)
         priority[mask == 0] = -1e9
 
         chosen = int(np.argmax(priority))

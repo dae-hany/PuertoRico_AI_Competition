@@ -69,7 +69,15 @@ class MyAgent(Agent):
 
 ## Determinism and seating
 
-- Games are **seeded and reproducible**.
+- Games are **seeded and reproducible**: the same seed and the same agents
+  replay the same game, in the same process or a different one.
+- The engine keeps its randomness to itself (each game owns a private
+  `random.Random`). It never reads or re-seeds the global `random` /
+  `np.random` states, so **your agent may use them freely** — you cannot
+  perturb the deal, and the environment will not silently reset your RNG.
+- The flip side: because nothing re-seeds the global state for you, an agent
+  that wants to be reproducible must **seed its own RNG** (e.g. hold a
+  `np.random.default_rng(seed)`), as the bundled baselines do.
 - The organizer runs a **seat-balanced round-robin**, so turn-order / seating
   advantage is controlled — each agent plays each seating.
 

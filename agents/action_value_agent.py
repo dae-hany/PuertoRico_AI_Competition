@@ -937,10 +937,17 @@ class ActionValueAgentSimple(ActionValueAgent):
     bonuses. Useful for comparison or when action semantics are unclear.
     """
     
+    def __init__(self, *args, seed: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Private RNG (see the note on the other heuristics): the env no longer
+        # re-seeds the global np.random state, so tie-breaking noise has to come
+        # from the agent's own stream to stay reproducible.
+        self._rng = np.random.default_rng(seed)
+
     def _estimate_action_value(self, game, player_idx: int, action_idx: int,
                                 base_heuristic: float) -> float:
         """Simply return base heuristic with small random tie-breaking."""
-        return base_heuristic + np.random.uniform(0, 0.001)
+        return base_heuristic + self._rng.uniform(0, 0.001)
 
 
 # Backward compatibility aliases (deprecated - will be removed in future versions)

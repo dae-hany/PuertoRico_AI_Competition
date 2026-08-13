@@ -154,6 +154,11 @@ def collect_rollout(runner: EnvRunner, agent, num_steps: int, device: str,
         # Snapshot before draining: PettingZoo's _was_dead_step deletes each
         # agent's entry from `rewards`, so this is the only chance to read them.
         final_rewards = {k: float(v) for k, v in base.rewards.items()}
+        # Kept so the training_log.csv schema is stable, but this now always
+        # reads 0: the env no longer ends a game with an "error" info when the
+        # engine rejects a mask-legal action — it raises instead, so a
+        # mask/engine mismatch surfaces as a crashed run rather than as silently
+        # poisoned episodes. See puerto_rico/env.py::step.
         if any("error" in base.infos.get(f"player_{p}", {}) for p in range(n)):
             illegal_ends += 1
 

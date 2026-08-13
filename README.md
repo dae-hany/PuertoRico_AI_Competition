@@ -70,7 +70,7 @@ Copy [`submission_template/`](submission_template/) to get started, then read th
 | `SearchAgent` | alpha‑beta search (**2p**), deterministic node budget | **strongest in 2p** — beats every other baseline |
 | `SearchLiteAgent` | alpha‑beta search (**2p**), small node budget | strong but clearly beatable — a **beginner target** |
 | `PpoAgent` | PPO self-play (RL, **3p**) | **strongest in 3p** — beats every other baseline (90% vs `ActionValue`) |
-| `MctsAgent` | Max^N UCT tree search (**3p**) | strong (slow); 3p‑oriented |
+| `MctsAgent` | Max^N UCT tree search (**both tracks**) | strong (slow) |
 | `ActionValueAgent` | greedy heuristic — scores each legal action, plays the best | strong |
 | `ShippingRushAgent` | shipping-focused heuristic | strong |
 | `TradeBuildingAgent` | trade → building heuristic | moderate (the strongest *heuristic* in 2p) |
@@ -79,11 +79,11 @@ Copy [`submission_template/`](submission_template/) to get started, then read th
 
 The heuristic baselines (`ActionValue`, `ShippingRush`, `TradeBuilding`,
 `Factory`, `Random`) are player-count-agnostic and play **both tracks**
-unchanged. `SearchAgent` / `SearchLiteAgent` are **2p-focused** — they search the
-1‑vs‑1 game and fall back to a reactive heuristic in a 3p game. `MctsAgent` is
-**3p-oriented** (its value vectors are hard-coded to 3 players, so in a 2p game
-it errors and the harness substitutes random moves). The bundled PPO checkpoint
-is **3p-only** (293-dim); a 2p PPO agent would need its own 220-dim training run.
+unchanged, and so does `MctsAgent` (its Max^N value vectors are sized from the
+game it is handed). `SearchAgent` / `SearchLiteAgent` are **2p-focused** — they
+search the 1‑vs‑1 game and fall back to a reactive heuristic in a 3p game. The
+bundled PPO checkpoint is **3p-only** (293-dim); a 2p PPO agent would need its
+own 220-dim training run.
 `PpoAgent` is the target to beat in the 3p track — see
 [`training/README.md`](training/README.md) for its measured results against every
 other baseline, and for how to train your own.
