@@ -102,8 +102,17 @@ class PBRSWrapper(BaseWrapper):
     Potential-Based Reward Shaping Wrapper.
     Adds dense rewards to the base environment's sparse rewards based on
     the change in game potential Φ(s') - Φ(s).
+
+    Not used by the bundled trainer, but kept correct so that anyone who reaches
+    for it gets the guarantee it is named after. Ng et al.'s result — that
+    potential-based shaping leaves the optimal policy unchanged — holds only if
+
+      * ``gamma`` is the **same discount the learner uses** (this repo trains at
+        ``gamma=1.0``, so that is the default here; 0.99 quietly broke it), and
+      * ``Φ(terminal) = 0``, otherwise the final transition pays out a shaped
+        reward that no future state can cancel, which shifts the optimum.
     """
-    def __init__(self, env: AECEnv, w_ship: float = 1.0, w_bldg: float = 1.0, w_doub: float = 1.0, gamma: float = 0.99):
+    def __init__(self, env: AECEnv, w_ship: float = 1.0, w_bldg: float = 1.0, w_doub: float = 1.0, gamma: float = 1.0):
         super().__init__(env)
         self.w_ship = w_ship
         self.w_bldg = w_bldg
@@ -129,10 +138,14 @@ class PBRSWrapper(BaseWrapper):
         
         self.env.step(action)
         
-        # Add PBRS to the acting player
-        new_potential = self._compute_potential(player_idx)
+        # Add PBRS to the acting player. Φ(terminal) is 0 by definition, so a
+        # move that ends the game is shaped by -Φ(s) alone.
+        terminal = not self.env.agents or all(
+            self.env.terminations.get(a, False) or self.env.truncations.get(a, False)
+            for a in self.env.agents)
+        new_potential = 0.0 if terminal else self._compute_potential(player_idx)
         old_potential = self._prev_potentials[f"player_{player_idx}"]
-        
+
         shaping_reward = (self.gamma * new_potential) - old_potential
         
         self.env.rewards[agent] += shaping_reward

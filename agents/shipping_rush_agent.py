@@ -1,5 +1,4 @@
 import numpy as np
-import random
 
 from agents.base import Agent
 from puerto_rico.constants import BUILDING_DATA, BuildingType, Good, TileType
@@ -28,12 +27,19 @@ class ShippingRushAgent(Agent):
 
     name = "ShippingRush"
 
-    def __init__(self, action_dim: int = 200, fixed_strategy: int | None = None):
+    def __init__(self, action_dim: int = 200, fixed_strategy: int | None = None,
+                 seed: int = 0):
         super().__init__()
         self.action_dim = action_dim
         self.fixed_strategy = fixed_strategy
         self.strategy = 0
         self._env = None
+        # Private RNG for tie-breaking noise. It used to draw from the global
+        # `np.random` state, which was reproducible only by accident: the env's
+        # reset() re-seeded that global state at every game. Now that the env
+        # keeps its randomness to itself, the agent has to own its own — pass a
+        # different `seed` if you want a differently-jittered opponent.
+        self._rng = np.random.default_rng(seed)
         self.reset_strategy()
 
     def on_game_start(self, forward_model=None):
@@ -92,12 +98,9 @@ class ShippingRushAgent(Agent):
             action = 8 + tile_type  # Direct tile_type to action mapping
             if tile_type < 6 and face_up_counts[tile_type] > 0 and mask[action]:
                 priority[action] = base - rank * 5.0
-        # Quarry (tile_type 5)
-        if 5 in wanted_tiles:
-            if mask[13]:
-                priority[13] = base + 10.0
-            elif mask[14]:
-                priority[14] = base + 10.0
+        # Quarry is action 13 (there is no action 14 in the env's action space).
+        if 5 in wanted_tiles and mask[13]:
+            priority[13] = base + 10.0
 
     # ------------------------------------------------------------------
     # Opponent analysis helpers
@@ -195,10 +198,14 @@ class ShippingRushAgent(Agent):
                     best_score = score
                     best_action = action
 
-        # Check Wharf option (74-78 for wharf shipping)
+        # Wharf loads are actions 59-63 (the env never emits 74-78, so scoring
+        # them there made this whole branch dead: the agent bought the Wharf as
+        # its top building priority and then never deliberately used it).
+        # The Wharf ships every barrel of one kind with no capacity limit, so it
+        # is scored on the full holding, not on what fits in a ship.
         if has_wharf and not wharf_used:
             for good_idx in range(5):
-                action = 74 + good_idx
+                action = 59 + good_idx
                 if not mask[action]:
                     continue
 
@@ -253,7 +260,7 @@ class ShippingRushAgent(Agent):
                     base = 240.0
                 elif b_type in trade_bldgs:
                     base = 235.0
-                priority[action_id] = base + np.random.uniform(0, 5.0)
+                priority[action_id] = base + self._rng.uniform(0, 5.0)
 
         # Island tile colonist placement (120-125): use mask to find valid targets by TileType
         for t_val in range(6):
@@ -265,7 +272,7 @@ class ShippingRushAgent(Agent):
                     base = 225.0
                 elif t_type in (TileType.COFFEE_PLANTATION, TileType.TOBACCO_PLANTATION, TileType.SUGAR_PLANTATION):
                     base = 230.0
-                priority[action_id] = base + np.random.uniform(0, 5.0)
+                priority[action_id] = base + self._rng.uniform(0, 5.0)
 
     # ------------------------------------------------------------------
     # Main inference
@@ -448,14 +455,10 @@ class ShippingRushAgent(Agent):
                 if mask[i]:
                     priority[i] = 55.0 + i
 
-        priority += np.random.uniform(0, 0.1, size=self.action_dim)
+        priority += self._rng.uniform(0, 0.1, size=self.action_dim)
         priority[mask_np <= 0.5] = -1e9
 
         valid_actions = np.where(mask_np > 0.5)[0]
 
         chosen_act = int(np.argmax(priority))
         return int(chosen_act)
-
-
-# Backward compatibility alias (deprecated - will be removed in future versions)
-AdvancedRuleBasedAgent = ShippingRushAgent

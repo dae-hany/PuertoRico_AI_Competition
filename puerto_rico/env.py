@@ -1,4 +1,5 @@
 import copy
+import random
 
 from pettingzoo import AECEnv
 try:
@@ -139,16 +140,32 @@ class PuertoRicoEnv(AECEnv):
         }
         return spaces.Dict(obs_space)
 
+    def _episode_rng(self, seed) -> random.Random:
+        """Build the RNG this episode's engine will own.
+
+        The process-global ``random`` / ``np.random`` states are never touched,
+        so env seeding cannot couple with an agent's own RNG use (MCTS
+        determinization, exploration noise, a heuristic's tie-breaks, ...) in
+        either direction.
+
+            reset(seed=S)           -> Random(S)           reproducible game
+            random_seed_mode=True   -> Random()            fresh deal each reset
+            random_seed_mode=False  -> Random(fixed_seed)  identical episodes
+        """
+        if seed is not None:
+            return random.Random(seed)
+        if self.random_seed_mode:
+            return random.Random()
+        return random.Random(self.fixed_seed)
+
+    def _make_game(self, rng: random.Random) -> PuertoRicoGame:
+        return PuertoRicoGame(self.num_players, rng=rng)
+
     def reset(self, seed=None, options=None):
-        # Seed control
-        final_seed = seed if self.random_seed_mode else self.fixed_seed
+        rng = self._episode_rng(seed)
         # Remember the seed so ForwardModel can derive a reproducible — but
         # engine-independent — RNG for determinizing the hidden plantation order.
-        self._seed = final_seed
-        if final_seed is not None:
-            import random
-            random.seed(final_seed)
-            np.random.seed(final_seed)
+        self._seed = seed if self.random_seed_mode else self.fixed_seed
 
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0.0 for agent in self.agents}
@@ -163,7 +180,7 @@ class PuertoRicoEnv(AECEnv):
             "player_stats": {}
         }
 
-        self.game = PuertoRicoGame(self.num_players)
+        self.game = self._make_game(rng)
         self.game.start_game()
         self._game_step_count = 0
 
@@ -418,14 +435,20 @@ class PuertoRicoEnv(AECEnv):
                 self.game.action_craftsman(player_idx, privilege_good=g_type)
 
         except ValueError as e:
-            # Invalid action penalty (reduced to -10 to avoid value function distortion)
-            self.rewards[agent] = -10.0
-            for a in self.agents:
-                self.terminations[a] = True
-                self.infos[a]["error"] = str(e)
-            self._accumulate_rewards()
-            self.agent_selection = f"player_{self.game.current_player_idx}"
-            return
+            # An action the mask advertised as legal but the engine rejects is a
+            # bug in this repo, not a game event. It used to be swallowed here:
+            # the actor got -10 and the whole game was terminated, which quietly
+            # corrupted a result instead of reporting a defect (exactly how a
+            # Mayor-phase deadlock went unnoticed in the research code until it
+            # was made loud). Agents cannot trigger this — the harness already
+            # replaces illegal *agent* moves with a random legal one before the
+            # env ever sees them.
+            raise AssertionError(
+                f"valid_action_mask() allowed action {action} but the engine "
+                f"rejected it in phase "
+                f"{self.game.current_phase.name if self.game.current_phase else 'INIT'} "
+                f"for {agent}: {e}"
+            ) from e
 
         self._game_step_count += 1
         done = self.game.check_game_end()

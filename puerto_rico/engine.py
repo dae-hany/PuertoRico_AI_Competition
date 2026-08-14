@@ -13,10 +13,18 @@ from puerto_rico.components import CargoShip
 from puerto_rico.player import Player
 
 class PuertoRicoGame:
-    def __init__(self, num_players: int, doubloon_per_round: int = 1):
+    def __init__(self, num_players: int, doubloon_per_round: int = 1,
+                 rng: Optional[random.Random] = None):
         if num_players not in [2, 3, 4, 5]:
             raise ValueError("Puerto Rico only supports 2, 3, 4, or 5 players.")
-        
+
+        # Every bit of engine randomness (the governor draw, the plantation
+        # shuffles) goes through this per-game instance and never through the
+        # global `random` module. Two things depend on that: a seeded match
+        # replays identically, and an agent that uses `random` itself cannot
+        # shift the deal it is about to be dealt.
+        self.rng = rng if rng is not None else random.Random()
+
         self.num_players = num_players
         self.players: List[Player] = [Player(i) for i in range(num_players)]
         
@@ -66,7 +74,7 @@ class PuertoRicoGame:
         self.roles_in_play: List[Role] = [] # Roles currently picked by players this round
         
         # State Machine Tracking
-        self.governor_idx = random.randint(0, num_players - 1)
+        self.governor_idx = self.rng.randint(0, num_players - 1)
         self.current_player_idx = self.governor_idx
         self.current_phase: Optional[Phase] = None
         self.active_role: Optional[Role] = None
@@ -99,7 +107,7 @@ class PuertoRicoGame:
             if self.num_players == 2:
                 count -= 3
             stack.extend([t_type] * count)
-        random.shuffle(stack)
+        self.rng.shuffle(stack)
         return stack
 
     def _init_roles(self) -> List[Role]:
@@ -144,7 +152,7 @@ class PuertoRicoGame:
         
         for _ in range(needed):
             if not self.plantation_stack and self.plantation_discard:
-                random.shuffle(self.plantation_discard)
+                self.rng.shuffle(self.plantation_discard)
                 self.plantation_stack = self.plantation_discard
                 self.plantation_discard = []
                 
@@ -365,8 +373,9 @@ class PuertoRicoGame:
                 self.players[self.current_player_idx].recall_all_colonists()
         else:
             self.players_taken_action += 1
-            # 중복 사용 방지 : 한 플레이어가 자신의 한 차례에 하시엔다를 두 번 쓰는 것을 막음
-            # 다음 플레이어 배려 : 다음 플레이어도 하시엔다를 가지고 있다면 그 플레이어가 정상적으로 자신의 하시엔다 능력을 사용
+            # Cleared per turn, not per phase: it stops one player using their
+            # Hacienda twice in their own turn, while still letting the next
+            # player use theirs.
             self._hacienda_used = False
             if self.players_taken_action >= self.num_players:
                 # Phase is over
@@ -673,13 +682,23 @@ class PuertoRicoGame:
             p.build_building(building_choice)
             self.building_supply[building_choice] -= 1
             
-            # University Check
+            # University — official rule (Deluxe rulebook, University): the free
+            # colonist goes "on the newly acquired tile", and "if there are no
+            # more colonists in the colonist supply, they may take one from the
+            # colonist ship. If there are also none there, they take none."
             if p.is_building_occupied(BuildingType.UNIVERSITY):
+                # Target the building just built, NOT city_board[-1]: a large
+                # building appends (building, OCCUPIED_SPACE), so the last entry
+                # is the dummy second space. Putting the colonist there leaves
+                # the large building unstaffed and silently forfeits its
+                # end-game bonus until the next Mayor redistribution.
+                new_slot = next(b for b in reversed(p.city_board)
+                                if b.building_type == building_choice)
                 if self.colonists_supply > 0:
-                    p.city_board[-1].colonists += 1
+                    new_slot.colonists += 1
                     self.colonists_supply -= 1
                 elif self.colonists_ship > 0:
-                    p.city_board[-1].colonists += 1
+                    new_slot.colonists += 1
                     self.colonists_ship -= 1
                     
         self._advance_phase_turn()

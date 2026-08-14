@@ -6,13 +6,21 @@ select -> expand -> rollout -> backpropagate on clones of the
 :class:`~puerto_rico.forward_model.ForwardModel`, then plays the most-visited
 action at the root.
 
-Because Puerto Rico is a 3-player, non-zero-sum game, the tree uses **Max^N**
-value vectors: every node stores one value estimate per player, and each player
-greedily maximises its own component during selection.
+Because Puerto Rico is a general-sum game, the tree uses **Max^N** value
+vectors: every node stores one value estimate per player, and each player
+greedily maximises its own component during selection. The vector length is
+taken from the game being searched, so the same agent plays both competition
+tracks (2p and 3p).
 
-Strong but slow: cost scales with ``num_simulations`` x rollout length. Tune
+The hidden plantation order is determinized **once per move**: the agent clones
+the live model once and simulates from that clone, so every simulation plays out
+the same consistent world and the actions stored in the tree stay legal in it.
+
+Strong but slow, and it has **no internal time cap** — cost is
+``num_simulations`` x rollout length regardless of the clock. Tune
 ``num_simulations`` / ``max_rollout_depth`` to your per-move time budget (the
-competition allows 1 s/move — see ``docs/COMPETITION_RULES.md``).
+competition allows 1 s/move — see ``docs/COMPETITION_RULES.md``); the default of
+200 does *not* fit that budget on a typical machine.
 """
 import math
 
@@ -20,29 +28,30 @@ import numpy as np
 
 from agents.base import Agent
 
-N_PLAYERS = 3
 _INF = float("inf")
 
 
 class _Node:
     """A node in the Max^N MCTS tree."""
 
-    __slots__ = ("parent", "action_taken", "acting_player",
+    __slots__ = ("parent", "action_taken", "acting_player", "n_players",
                  "children", "untried_actions", "visit_count", "value_sum")
 
-    def __init__(self, parent=None, action_taken=None, acting_player=0):
+    def __init__(self, parent=None, action_taken=None, acting_player=0,
+                 n_players: int = 3):
         self.parent = parent
         self.action_taken = action_taken      # action that led here from parent
         self.acting_player = acting_player    # player to move at this node
+        self.n_players = n_players            # length of the Max^N value vector
         self.children = {}                    # action -> _Node
         self.untried_actions = None           # set on first visit
         self.visit_count = 0
-        self.value_sum = np.zeros(N_PLAYERS, dtype=np.float32)
+        self.value_sum = np.zeros(n_players, dtype=np.float32)
 
     @property
     def q(self) -> np.ndarray:
         if self.visit_count == 0:
-            return np.zeros(N_PLAYERS, dtype=np.float32)
+            return np.zeros(self.n_players, dtype=np.float32)
         return self.value_sum / self.visit_count
 
     def is_fully_expanded(self) -> bool:
@@ -69,7 +78,7 @@ class _Node:
 
 def _terminal_rewards(model) -> np.ndarray:
     """Reward vector at a finished game: +1 winner, -1 losers (shared on ties)."""
-    rewards = np.full(N_PLAYERS, -1.0, dtype=np.float32)
+    rewards = np.full(len(model.scores()), -1.0, dtype=np.float32)
     winners = model.winners()
     share = 1.0 / len(winners)
     for w in winners:
@@ -100,10 +109,17 @@ def _random_rollout(model, max_depth, rng) -> np.ndarray:
 
 
 class MctsAgent(Agent):
-    """Max^N UCT MCTS planning agent (3-player, non-zero-sum).
+    """Max^N UCT MCTS planning agent (general-sum, any player count).
+
+    The Max^N value vector is sized from the game it is handed, so one instance
+    plays both the 2p and the 3p track.
 
     Args:
-        num_simulations: rollouts per move (higher = stronger and slower).
+        num_simulations: rollouts per move (higher = stronger and slower). The
+            default is chosen to fit the competition's 1 s/move budget with room
+            to spare — measured ~0.3 s/move, where the previous default of 200
+            sat right on the limit and would time out on a slower machine, i.e.
+            the baseline would have been breaking the rule entrants must keep.
         c_uct: UCT exploration constant (default ``sqrt(2)``).
         max_rollout_depth: cap rollout length; ``None`` plays to the end.
         seed: RNG seed for reproducibility.
@@ -111,8 +127,8 @@ class MctsAgent(Agent):
 
     name = "MCTS"
 
-    def __init__(self, num_simulations: int = 200, c_uct: float = math.sqrt(2),
-                 max_rollout_depth: int = 100, seed: int = 42):
+    def __init__(self, num_simulations: int = 60, c_uct: float = math.sqrt(2),
+                 max_rollout_depth: int = 40, seed: int = 42):
         super().__init__()
         self.num_simulations = num_simulations
         self.c_uct = c_uct
@@ -128,13 +144,29 @@ class MctsAgent(Agent):
             legal = np.where(np.asarray(action_mask) > 0.5)[0]
             return int(self._rng.choice(legal)) if len(legal) else 15
 
-        root = _Node(acting_player=self._model.current_player())
+        # Seat count of the game actually being played (2 in the 1-vs-1 track,
+        # 3 in the 3p track) — every value vector in the tree uses this length.
+        n_players = len(self._model.scores())
+
+        # Determinize ONCE per move, then simulate from that world.
+        #
+        # Cloning the *live* model reshuffles the face-down plantations every
+        # time, so cloning it per simulation would put every simulation in a
+        # different world while the tree still stores actions chosen in an
+        # earlier one — "take the face-up Sugar" is not a legal move in a world
+        # that dealt Coffee there. Cloning a clone preserves the order (see
+        # ForwardModel.clone), which is exactly the self-consistency a search
+        # tree needs within one move.
+        root_model = self._model.clone()
+
+        root = _Node(acting_player=root_model.current_player(),
+                     n_players=n_players)
         root.untried_actions = [int(a) for a in np.where(np.asarray(action_mask) > 0.5)[0]]
         if not root.untried_actions:
             return 15
 
         for _ in range(self.num_simulations):
-            sim = self._model.clone()
+            sim = root_model.clone()
             node = root
 
             # 1. SELECTION — descend the tree by UCT until a not-fully-expanded node
@@ -152,11 +184,13 @@ class MctsAgent(Agent):
                 sim.step(action)
                 if not sim.is_terminal():
                     child = _Node(parent=node, action_taken=action,
-                                  acting_player=sim.current_player())
+                                  acting_player=sim.current_player(),
+                                  n_players=n_players)
                     child.untried_actions = sim.legal_actions()
                 else:
                     child = _Node(parent=node, action_taken=action,
-                                  acting_player=node.acting_player)
+                                  acting_player=node.acting_player,
+                                  n_players=n_players)
                     child.untried_actions = []
                 node.children[action] = child
                 node = child

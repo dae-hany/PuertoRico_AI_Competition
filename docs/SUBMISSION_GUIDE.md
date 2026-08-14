@@ -13,12 +13,13 @@ difference your code sees is the **observation length** (220 in 2p, 293 in 3p).
 ```bash
 git clone <this-repo>
 cd PuertoRico_AI_Competition
-python -m venv .venv && . .venv/Scripts/activate     # Windows: .venv\Scripts\activate
-pip install -e .                                     # deps + importable packages
-python examples/play_one_game.py                     # smoke test
+python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -e .                                 # deps + importable packages
+python examples/play_one_game.py                 # smoke test
 ```
 
-NumPy is required; PyTorch is only needed for the PPO baseline and training.
+NumPy is required; PyTorch is only needed for the PPO baseline and training —
+`pip install -e ".[rl]"` adds it.
 
 ## 2. The interface
 
@@ -83,9 +84,11 @@ print(result["scores"], "winner:", result["winners"])
 Or add `MyAgent` to the `pool` in [`examples/run_tournament.py`](../examples/run_tournament.py)
 and run it to see your win rate on each track's leaderboard.
 
-**Baselines, strongest to weakest:** MCTS ≈ ActionValue ≈ ShippingRush (strong) >
-TradeBuilding (moderate) > Factory > PPO ≈ Random (weak). Beating the strong
-heuristics and MCTS is the real challenge.
+**How strong are the baselines?** Measured numbers, per track, are in
+[BASELINES.md](BASELINES.md) — and the ordering is **not the same in both
+tracks**, so check the one you are entering. The targets to beat are
+`SearchAgent` in 2p and `PpoAgent` in 3p; among the heuristics, `TradeBuilding`
+leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 
 ## 5. Going further
 

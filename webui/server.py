@@ -18,7 +18,6 @@ This is a local single-game debug tool (global state, no auth). It is not the
 competition runner — that is `tournament/` (see docs/COMPETITION_RULES.md).
 """
 import copy
-import importlib
 import importlib.util
 import logging
 import os
@@ -38,6 +37,7 @@ from agents.base import Agent
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent,
                     RandomAgent, ShippingRushAgent, TradeBuildingAgent)
 from agents.search_agent import SearchAgent, SearchLiteAgent
+from tournament.sandbox import load_agent_class
 try:                                      # PPO is optional (needs torch)
     from agents import PpoAgent
 except Exception:
@@ -99,20 +99,12 @@ def _import_from_path(path, mod_name):
 
 
 def load_custom_agent(spec: str) -> Agent:
-    """Instantiate an agent from 'module:Class' or 'path/to/file.py:Class'."""
-    if ":" not in spec:
-        raise ValueError(f"Custom agent must be 'module:Class' or 'file.py:Class', got '{spec}'")
-    mod_part, cls_name = spec.rsplit(":", 1)
-    looks_like_path = mod_part.endswith(".py") or "/" in mod_part or os.sep in mod_part
-    if looks_like_path:
-        path = mod_part if os.path.isabs(mod_part) else os.path.join(ROOT, mod_part)
-        module = _import_from_path(path, "_custom_agent_module")
-    else:
-        module = importlib.import_module(mod_part)
-    cls = getattr(module, cls_name)
-    if not (isinstance(cls, type) and issubclass(cls, Agent)):
-        raise TypeError(f"{cls_name} is not an Agent subclass")
-    return cls()
+    """Instantiate an agent from 'module:Class' or 'path/to/file.py:Class'.
+
+    Shares the tournament's loader so that an agent which the web UI accepts is
+    exactly one the competition harness accepts too.
+    """
+    return load_agent_class(spec, base_dir=ROOT)()
 
 
 def resolve_agent(token: str):

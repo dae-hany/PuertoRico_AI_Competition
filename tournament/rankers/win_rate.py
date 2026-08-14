@@ -1,10 +1,15 @@
 """
-tournament/rankers/win_rate.py — the OFFICIAL competition ranking.
+tournament/rankers/win_rate.py — win rate, reported alongside both tracks.
 
 Agents are ranked by their **win rate** across a seat-balanced round-robin:
 the fraction of games each agent wins (ties split the win equally). A Wilson
 95% confidence interval is reported so close standings can be read with their
 uncertainty. Simple and transparent — "who wins the most games".
+
+This is the *companion* view, not the standings: the official metric is Elo in
+the 2p track and TrueSkill in the 3p track, both of which weight a result by the
+strength of the opponent beaten. Win rate is shown next to them as an
+assumption-free check. See ``docs/RANKING.md``.
 """
 import math
 

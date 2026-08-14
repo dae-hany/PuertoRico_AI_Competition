@@ -124,6 +124,20 @@ class ForwardModel:
         view = self._redacted_view() if self._live else self._env
         return view.unwrapped.game
 
+    def redacted_snapshot(self):
+        """A determinized copy of the live env, safe to hand outside this process.
+
+        Every public field holds its true current value, but the face-down
+        plantation order is randomly permuted, so the snapshot carries no
+        information the player is not entitled to. This is what the subprocess
+        sandbox ships to an isolated planning agent: the agent gets a forward
+        model to simulate with, while the real game — and the real draw order —
+        stay in the organizer's process.
+        """
+        if not self._live:
+            raise ValueError("redacted_snapshot() is only meaningful on the live model")
+        return self._redacted_view()
+
     def _redacted_view(self):
         """A determinized snapshot of the live env, rebuilt when the game moves.
 

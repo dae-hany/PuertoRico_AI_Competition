@@ -3,7 +3,9 @@ tournament/runner.py — schedule games and aggregate the rankings.
 
 The pool is a dict ``{name: factory}`` where ``factory()`` returns a fresh
 :class:`~agents.base.Agent` (a factory, not a shared instance, so every game
-starts from a clean state and is reproducible).
+starts from a clean state and is reproducible). For the official run, build the
+entrants' half of the pool with :func:`tournament.sandbox.sandboxed_pool`, which
+returns factories of the same shape whose agents run in their own processes.
 
 `run_round_robin` plays a seat-balanced round-robin and feeds the win-rate
 (official) and TrueSkill rankers. `estimate_payoff_matrix` builds the monomorphic

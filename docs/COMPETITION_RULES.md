@@ -57,6 +57,13 @@ class MyAgent(Agent):
 - You have **1 second of wall-clock time per move**.
 - If a move exceeds 1 s, the harness **discards your move**, plays a **uniformly
   random legal action** instead, and records a **timeout**.
+- In the official run this is **enforced, not just measured**: your agent runs in
+  its own process and is **killed** when the budget expires, so a move that never
+  returns costs you that move rather than hanging the tournament. A killed agent
+  is rebuilt for the next move, which means **any state it had accumulated during
+  the game is lost** — one more reason to finish well inside the budget.
+- An agent that overruns **repeatedly** stops being restarted and **forfeits the
+  rest of that game** (its remaining moves are played at random).
 
 ## Legality and errors
 
@@ -69,7 +76,15 @@ class MyAgent(Agent):
 
 ## Determinism and seating
 
-- Games are **seeded and reproducible**.
+- Games are **seeded and reproducible**: the same seed and the same agents
+  replay the same game, in the same process or a different one.
+- The engine keeps its randomness to itself (each game owns a private
+  `random.Random`). It never reads or re-seeds the global `random` /
+  `np.random` states, so **your agent may use them freely** — you cannot
+  perturb the deal, and the environment will not silently reset your RNG.
+- The flip side: because nothing re-seeds the global state for you, an agent
+  that wants to be reproducible must **seed its own RNG** (e.g. hold a
+  `np.random.default_rng(seed)`), as the bundled baselines do.
 - The organizer runs a **seat-balanced round-robin**, so turn-order / seating
   advantage is controlled — each agent plays each seating.
 
@@ -109,6 +124,9 @@ class MyAgent(Agent):
 - The `forward_model` provided to planning agents is for **read-only
   simulation** — **clone it, never mutate the live game**. Using it to corrupt
   the real game or to peek at hidden information improperly is **cheating**.
+  This is **checked, not assumed**: in-process the harness compares the real
+  game state before and after every one of your moves and records a breach; in
+  the official run your process cannot reach the real game at all.
 
 ## Hidden information
 
@@ -126,13 +144,33 @@ class MyAgent(Agent):
     read directly without cloning.
   - The randomisation is independent of the real game (it never perturbs actual
     play) and reproducible under a fixed match seed.
+  - In the official run the true order is not merely hidden behind an accessor:
+    the copy shipped to your process has **already been reshuffled**, so the
+    real order never leaves the organizer's process at all.
 
-## Environment note (for organizers)
+## How the official run is executed
 
-- In the **course** setting, agents run **in-process**.
-- For the **public IEEE CoG** run, the organizer may additionally **isolate each
-  agent in a subprocess** with enforced resource limits.
-- Either way, the per-move time limit and all rules above apply.
+The same rules apply in both settings below; they differ in how much is
+**enforced** rather than trusted.
+
+- **Course setting / your own testing** — agents run **in-process**
+  (`tournament/match.py`). The time limit is measured after each move, and the
+  forward model you are handed is a live object. The harness does verify after
+  every move that you left the real game exactly as you found it, and reports
+  any breach as `tampered` in the game record.
+- **Public IEEE CoG run** — each agent runs in **its own process**
+  (`tournament/sandbox.py`). The organizer's process owns the game; your agent
+  never holds a reference to it. Consequences for you:
+  - the per-move deadline is enforced by killing the worker (see above);
+  - a planning agent still gets a forward model — a **determinized copy** of the
+    game is handed to your process every move, and `clone()` / `step()` behave
+    exactly as they do in-process (measured overhead ≈ 2 ms per move);
+  - each worker gets a memory cap and single-threaded BLAS defaults, so budget
+    your agent accordingly (say so in your submission if you need more);
+  - a crash costs you one move, not the match.
+
+Write and test your agent against the in-process harness; if it respects the
+rules, isolation changes nothing you can observe.
 
 ## Fair play
 

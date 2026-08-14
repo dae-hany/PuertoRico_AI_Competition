@@ -2,28 +2,43 @@
 
 This folder holds the PPO self-play trainer used to produce the learned baseline.
 It is **optional** — the competition only needs the core package, the baselines,
-and the tournament.
+and the tournament. It needs PyTorch: `pip install -e ".[rl]"`.
+
+The trainer works for **either track**: `--num_players 3` (default) or
+`--num_players 2`. The observation width follows from the seat count
+(`74 + 73 × num_players`, so 293 or 220), and `PpoAgent` reads that width back
+out of the checkpoint — but **a checkpoint only plays the track it was trained
+on**. The bundled `checkpoints/ppo_baseline.pt` is a **3p** run; the 2p track has
+no shipped RL baseline, which makes it an open target for entrants.
+
+```bash
+python training/train_ppo.py --num_players 2 --out_dir results/ppo_2p
+```
 
 `checkpoints/ppo_baseline.pt` is 5M steps of parameter-sharing self-play
-(~2.6 h on 8 CPU threads). Measured over 60 seat-rotated 3p games per matchup,
-greedy play, no illegal moves:
+(~2.6 h on 8 CPU threads) in the **3p** track. Against each heuristic, greedy
+play, seat-balanced, 24 games per matchup:
 
-| PPO (player) vs 2× | win rate | PPO mean VP | opponent mean VP |
-|---|---:|---:|---:|
-| `RandomAgent` | 100.0% | 69.5 | 25.2 |
-| `FactoryAgent` | 100.0% | 79.8 | 22.7 |
-| `TradeBuildingAgent` | 93.3% | 44.4 | 23.4 |
-| `ShippingRushAgent` | 88.3% | 53.3 | 28.0 |
-| `ActionValueAgent` | 90.0% | 51.2 | 32.2 |
-| `ActionValue` + `ShippingRush` | 98.3% | 54.1 | — |
+| PPO vs 2× | win rate |
+|---|---:|
+| `RandomAgent` | 100% |
+| `FactoryAgent` | 100% |
+| `TradeBuildingAgent` | 100% |
+| `ShippingRushAgent` | 83% |
+| `ActionValueAgent` | 83% |
 
-An agent of average strength wins ≈ 33.3% of 3-player games.
+An agent of average strength wins ≈ 33.3% of 3-player games, so PPO is the agent
+to beat in the 3p track. These numbers come from
+[`../docs/BASELINES.md`](../docs/BASELINES.md); regenerate them with
+`python tools/measure_baselines.py` after changing anything that could move
+them. (The table published before that tool existed was measured on an engine
+and a set of baselines that have since been corrected — see
+[`../CHANGES.md`](../CHANGES.md) — so it is not comparable.)
 
-Against `MctsAgent` at the web UI's practical budget (30 simulations, rollout
-depth 40) it wins **10/12** with 58.9 VP to 30.4. That is a small sample, and
-`MctsAgent`'s default 200-simulation budget was not measured — a single game at
-that setting takes tens of minutes, which is why the web UI does not use it
-either.
+For head-to-head numbers against `MctsAgent` — and for every other baseline
+pairing — see [`../docs/BASELINES.md`](../docs/BASELINES.md), which
+`tools/measure_baselines.py` regenerates. MCTS is quoted there **with its search
+budget**, because that is what defines its strength.
 
 ## Train
 
@@ -99,12 +114,14 @@ policy scores ≈ 0.33.)
 
 ## Files
 
-- `train_ppo.py` — PPO self-play training loop (parameter-sharing, 3 agents).
+- `train_ppo.py` — PPO self-play training loop (parameter-sharing; `--num_players`
+  picks the track).
 - `wrapper.py` — flattens (and rotates) the env observation for the network.
 - `random_bot.py` — a random opponent used by evaluation and the
   `fixed_random` training mode.
 - `checkpoints/ppo_baseline.pt` — the bundled baseline that `PpoAgent` and the
   web UI load by default.
 
-> Note: the `--env_mode aoe_ablation` option from the research code is not
-> shipped here; use the default `standard` mode.
+> Note: the research code's AOE-ablation environment is not part of this repo.
+> The `--env_mode` flag that used to offer it has been removed — it imported a
+> module that does not ship, so selecting it only ever raised `ModuleNotFoundError`.

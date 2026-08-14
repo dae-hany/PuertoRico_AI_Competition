@@ -64,20 +64,23 @@ from agents.ppo_agent import PpoNetwork as PPOAgent
 from training.random_bot import RandomBot
 from puerto_rico.constants import Role
 
-OBS_DIM   = 293
-ACT_DIM   = 200
-N_PLAYERS = 3
+ACT_DIM = 200
+
+# The observation is 74 global features plus 73 per player, so its length is a
+# function of the track: 220 in the 2p (1-vs-1) track, 293 in the 3p track.
+# Nothing else in the loop depends on the seat count.
+from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM
+
+
+def obs_dim_for(num_players: int) -> int:
+    return GLOBAL_DIM + PER_PLAYER_DIM * num_players
 
 
 # ── environment factory ────────────────────────────────────────────────────────
 
-def make_env(obs_mode: str = 'full', env_mode: str = 'standard',
-             egocentric: bool = True):
-    if env_mode == 'aoe_ablation':
-        from env.aoe_ablation_env import AOEAblationEnv
-        env = AOEAblationEnv(num_players=N_PLAYERS, random_seed_mode=True)
-    else:
-        env = PuertoRicoEnv(num_players=N_PLAYERS, random_seed_mode=True)
+def make_env(obs_mode: str = 'full', egocentric: bool = True,
+             num_players: int = 3):
+    env = PuertoRicoEnv(num_players=num_players, random_seed_mode=True)
     return CleanRLAECWrapper(env, obs_mode=obs_mode, egocentric=egocentric)
 
 
@@ -90,7 +93,7 @@ class EnvRunner:
     toward opening positions.
     """
 
-    def __init__(self, env, n_players: int = N_PLAYERS):
+    def __init__(self, env, n_players: int = 3):
         self.env = env
         self.n_players = n_players
         self.ep_steps = 0
@@ -117,8 +120,9 @@ def collect_rollout(runner: EnvRunner, agent, num_steps: int, device: str,
     """
     env = runner.env
     n   = runner.n_players
+    obs_dim = obs_dim_for(n)
 
-    obs_buf   = np.zeros((num_steps, OBS_DIM), dtype=np.float32)
+    obs_buf   = np.zeros((num_steps, obs_dim), dtype=np.float32)
     act_buf   = np.zeros(num_steps,            dtype=np.int64)
     logp_buf  = np.zeros(num_steps,            dtype=np.float32)
     val_buf   = np.zeros(num_steps,            dtype=np.float32)
@@ -154,6 +158,11 @@ def collect_rollout(runner: EnvRunner, agent, num_steps: int, device: str,
         # Snapshot before draining: PettingZoo's _was_dead_step deletes each
         # agent's entry from `rewards`, so this is the only chance to read them.
         final_rewards = {k: float(v) for k, v in base.rewards.items()}
+        # Kept so the training_log.csv schema is stable, but this now always
+        # reads 0: the env no longer ends a game with an "error" info when the
+        # engine rejects a mask-legal action — it raises instead, so a
+        # mask/engine mismatch surfaces as a crashed run rather than as silently
+        # poisoned episodes. See puerto_rico/env.py::step.
         if any("error" in base.infos.get(f"player_{p}", {}) for p in range(n)):
             illegal_ends += 1
 
@@ -331,17 +340,18 @@ def ppo_update(agent, optimizer, obs_buf, act_buf, logp_buf, adv_buf, ret_buf,
 # ── in-training evaluation (PPO vs Random × 2) ────────────────────────────────
 
 def run_eval(agent, n_episodes: int, device: str, obs_mode: str = 'full',
-             env_mode: str = 'standard', egocentric: bool = True,
-             greedy: bool = True) -> dict:
-    """Run n_episodes of PPO (player_0) vs 2 RandomBots. Returns stats dict.
+             egocentric: bool = True,
+             greedy: bool = True, num_players: int = 3) -> dict:
+    """Run n_episodes of PPO (player_0) vs RandomBots. Returns stats dict.
 
     ``greedy=True`` matches how ``agents.ppo_agent.PpoAgent`` actually plays
     (argmax over legal actions), so eval numbers describe the deployed policy
     rather than the exploration policy.
     """
-    random_agents = [RandomBot(), RandomBot()]
+    random_agents = [RandomBot() for _ in range(num_players - 1)]
     wins, vps, ep_lens = [], [], []
-    env = make_env(obs_mode=obs_mode, env_mode=env_mode, egocentric=egocentric)
+    env = make_env(obs_mode=obs_mode, egocentric=egocentric,
+                   num_players=num_players)
 
     for _ in range(n_episodes):
         env.reset()
@@ -429,7 +439,8 @@ def train(args):
         wandb.init(project="puerto_rico_ppo", config=vars(args))
 
     # Agent + optimizer
-    agent     = PPOAgent(obs_dim=OBS_DIM, action_dim=ACT_DIM).to(device)
+    agent     = PPOAgent(obs_dim=obs_dim_for(args.num_players),
+                         action_dim=ACT_DIM).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.lr, eps=1e-5)
 
     # LR: linear decay to 0 over the run. The loop runs ceil() updates, so
@@ -442,8 +453,10 @@ def train(args):
     )
 
     # Build envs once; they persist across rollouts (episodes are not restarted).
-    runners = [EnvRunner(make_env(obs_mode=args.obs_mode, env_mode=args.env_mode,
-                                  egocentric=args.egocentric))
+    runners = [EnvRunner(make_env(obs_mode=args.obs_mode,
+                                  egocentric=args.egocentric,
+                                  num_players=args.num_players),
+                         n_players=args.num_players)
                for _ in range(args.num_envs)]
 
     global_step      = 0
@@ -456,7 +469,9 @@ def train(args):
     recent_lens  = deque(maxlen=500)
 
     t0 = time.time()
-    print(f"Training PPO | total_timesteps={args.total_timesteps:,} | "
+    print(f"Training PPO | track={args.num_players}p "
+          f"(obs {obs_dim_for(args.num_players)}) | "
+          f"total_timesteps={args.total_timesteps:,} | "
           f"num_envs={args.num_envs} | n_steps={args.n_steps} | "
           f"updates={total_updates} | gamma={args.gamma} | lr={args.lr} | "
           f"egocentric={args.egocentric}")
@@ -491,7 +506,7 @@ def train(args):
         for i in range(args.num_envs):
             adv, ret = compute_gae_per_seat(
                 all_rew[i], all_val[i], all_done[i], all_owner[i], all_boot[i],
-                N_PLAYERS, args.gamma, args.gae_lambda,
+                args.num_players, args.gamma, args.gae_lambda,
             )
             adv_parts.append(adv)
             ret_parts.append(ret)
@@ -546,11 +561,11 @@ def train(args):
             # alongside it so a degenerate argmax is distinguishable from a
             # genuinely weak policy.
             stats = run_eval(agent, args.eval_episodes, device, obs_mode=args.obs_mode,
-                             env_mode=args.env_mode, egocentric=args.egocentric,
-                             greedy=True)
+                             egocentric=args.egocentric,
+                             greedy=True, num_players=args.num_players)
             samp  = run_eval(agent, args.eval_episodes, device, obs_mode=args.obs_mode,
-                             env_mode=args.env_mode, egocentric=args.egocentric,
-                             greedy=False)
+                             egocentric=args.egocentric,
+                             greedy=False, num_players=args.num_players)
             elapsed_eval = time.time() - t_eval
             with open(eval_csv, "a", newline="") as f:
                 csv.writer(f).writerow([
@@ -622,6 +637,10 @@ def parse_args():
     p.add_argument("--num_envs",        type=int,   default=8,
                    help="Number of independent environments for rollout pooling")
     p.add_argument("--seed",            type=int,   default=42)
+    p.add_argument("--num_players",     type=int,   default=3, choices=[2, 3],
+                   help="Which track to train for: 2 (1-vs-1, 220-dim obs) or "
+                        "3 (293-dim obs). A checkpoint is only valid for the "
+                        "track it was trained on.")
     p.add_argument("--eval_interval",   type=int,   default=50_000,
                    help="Run evaluation every N timesteps")
     p.add_argument("--eval_episodes",   type=int,   default=200,
@@ -643,10 +662,6 @@ def parse_args():
                    choices=["self_play", "fixed_random"],
                    help="self_play: shared policy for all agents (standard self-play); "
                         "fixed_random: only player_0 trained, opponents are fixed RandomBot")
-    p.add_argument("--env_mode",        type=str, default="standard",
-                   choices=["standard", "aoe_ablation"],
-                   help="standard: original Puerto Rico; "
-                        "aoe_ablation: selector-only phases (AOE ablated)")
     return p.parse_args()
 
 
