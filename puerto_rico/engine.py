@@ -1,4 +1,6 @@
+import copy
 import random
+from enum import Enum
 from typing import List, Dict, Optional, Tuple
 
 from puerto_rico.constants import (
@@ -100,6 +102,53 @@ class PuertoRicoGame:
         self.contention_wasted_goods = 0
 
         self._setup_players()
+
+    # Fields copied with dict()/list()/set() below hold only immutable values
+    # (enums, ints, bools), so a shallow container copy is a correct deep copy.
+    _CLONE_DICT_FIELDS = frozenset({
+        "goods_supply", "building_supply", "role_doubloons", "_wharf_used",
+    })
+    _CLONE_LIST_FIELDS = frozenset({
+        "trading_house", "plantation_stack", "face_up_plantations",
+        "plantation_discard", "available_roles", "roles_in_play",
+        "_craftsman_produced_kinds",
+    })
+
+    def __deepcopy__(self, memo):
+        # Hand-rolled clone: ForwardModel.clone() deep-copies the game thousands
+        # of times per planning move, and generic deepcopy's per-object dispatch
+        # dominates that cost. Every known field is copied by kind; anything
+        # unrecognized falls back to copy.deepcopy so a future mutable field
+        # cannot be silently shared between the live game and a search clone.
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memo[id(self)] = new
+        nd = new.__dict__
+        for k, v in self.__dict__.items():
+            if k == "rng":
+                r = random.Random()
+                r.setstate(v.getstate())
+                nd[k] = r
+            elif k == "players":
+                nd[k] = [copy.deepcopy(p, memo) for p in v]
+            elif k == "cargo_ships":
+                nd[k] = [CargoShip(s.capacity, s.current_load, s.good_type)
+                         for s in v]
+            elif k in cls._CLONE_DICT_FIELDS:
+                nd[k] = dict(v)
+            elif k in cls._CLONE_LIST_FIELDS:
+                nd[k] = list(v)
+            elif k == "_captain_passed_players":
+                nd[k] = set(v)
+            elif k == "_storage_assignments":
+                nd[k] = {i: {"windrose": a["windrose"],
+                             "warehouses": list(a["warehouses"])}
+                         for i, a in v.items()}
+            elif v is None or isinstance(v, (int, float, str, bool, Enum)):
+                nd[k] = v
+            else:
+                nd[k] = copy.deepcopy(v, memo)
+        return new
 
     def _init_plantation_stack(self) -> List[TileType]:
         stack = []

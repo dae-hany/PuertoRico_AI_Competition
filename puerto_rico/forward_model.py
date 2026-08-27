@@ -164,15 +164,37 @@ class ForwardModel:
         return self._env.unwrapped.agent_name_mapping[self._env.agent_selection]
 
     def action_mask(self) -> np.ndarray:
-        """Binary mask of shape (200,): 1 = legal action, 0 = illegal."""
+        """Binary mask of shape (200,): 1 = legal action, 0 = illegal.
+
+        Fast path: computes only the mask, skipping the full observation build
+        that ``env.observe()`` performs (planning agents query the mask at every
+        tree ply, so this directly sets the search budget). Semantics match
+        ``observe(agent_selection)["action_mask"]`` exactly: all zeros unless
+        the selected agent is the acting player and still alive.
+        """
         if self.is_terminal():
             return np.zeros(200, dtype=np.int8)
-        obs = self._env.observe(self._env.agent_selection)
-        return np.asarray(obs["action_mask"], dtype=np.int8)
+        env = self._env
+        agent = env.agent_selection
+        if env.terminations.get(agent, True) or env.truncations.get(agent, True):
+            return np.zeros(200, dtype=np.int8)
+        unwrapped = env.unwrapped
+        if unwrapped.agent_name_mapping[agent] != unwrapped.game.current_player_idx:
+            return np.zeros(200, dtype=np.int8)
+        return unwrapped.valid_action_mask().astype(np.int8)
 
     def legal_actions(self) -> list:
         """List of legal action indices for the player to move."""
-        return [int(a) for a in np.where(self.action_mask() > 0.5)[0]]
+        if self.is_terminal():
+            return []
+        env = self._env
+        agent = env.agent_selection
+        if env.terminations.get(agent, True) or env.truncations.get(agent, True):
+            return []
+        unwrapped = env.unwrapped
+        if unwrapped.agent_name_mapping[agent] != unwrapped.game.current_player_idx:
+            return []
+        return np.flatnonzero(unwrapped.valid_action_mask()).tolist()
 
     def observation(self) -> np.ndarray:
         """Flattened observation for the player to move (220-dim in 2p, 293-dim in 3p)."""

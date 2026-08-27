@@ -12,6 +12,24 @@ import numpy as np
 from puerto_rico.engine import PuertoRicoGame
 from puerto_rico.constants import Phase, Role, Good, TileType, BuildingType, BUILDING_DATA, MayorStrategy, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
 
+def _copy_nested(v):
+    """Fast deep copy of JSON-like bookkeeping (dicts/lists of scalars).
+
+    Used for ``episode_metrics``, which generic ``copy.deepcopy`` walks one
+    dispatch at a time — measurable when planning agents clone the env
+    thousands of times per move. Tuples of scalars are shared (immutable).
+    """
+    if isinstance(v, dict):
+        return {k: _copy_nested(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_copy_nested(x) for x in v]
+    if isinstance(v, tuple):
+        if all(isinstance(x, (int, float, str, bool, type(None))) for x in v):
+            return v
+        return tuple(_copy_nested(x) for x in v)
+    return v
+
+
 # Sparse rewards for benchmark
 class PuertoRicoEnv(AECEnv):
     metadata = {'render.modes': ['human'], 'name': 'puerto_rico_v0'}
@@ -39,13 +57,34 @@ class PuertoRicoEnv(AECEnv):
         "possible_agents", "agent_name_mapping",
     })
 
+    # Flat {agent_name: scalar} bookkeeping — a shallow dict copy is a deep copy.
+    _CLONE_FLAT_DICT_ATTRS = frozenset({
+        "rewards", "_cumulative_rewards", "terminations", "truncations",
+    })
+
     def __deepcopy__(self, memo):
         cls = self.__class__
         new = cls.__new__(cls)
         memo[id(self)] = new
-        for k, v in self.__dict__.items():
+        d = self.__dict__
+        # episode_metrics is seeded into the memo *before* infos is copied:
+        # _finalize_episode aliases the same metrics object into every agent's
+        # info dict, and that aliasing must survive the clone exactly as the
+        # generic deepcopy would preserve it.
+        em = d.get("episode_metrics")
+        if em is not None and id(em) not in memo:
+            memo[id(em)] = _copy_nested(em)
+        for k, v in d.items():
             if k in self._CLONE_SHARED_ATTRS:
                 new.__dict__[k] = v                       # share immutable config
+            elif k in self._CLONE_FLAT_DICT_ATTRS:
+                new.__dict__[k] = dict(v)
+            elif k == "agents":
+                new.__dict__[k] = list(v)
+            elif k == "episode_metrics":
+                new.__dict__[k] = memo[id(v)]
+            elif v is None or isinstance(v, (int, float, str, bool)):
+                new.__dict__[k] = v
             else:
                 new.__dict__[k] = copy.deepcopy(v, memo)  # copy mutable game state
         return new

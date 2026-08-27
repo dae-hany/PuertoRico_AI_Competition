@@ -1,3 +1,5 @@
+import copy
+from enum import Enum
 from typing import List, Dict
 from puerto_rico.constants import TileType, BuildingType, Good
 from puerto_rico.components import IslandTile, CityBuilding
@@ -27,6 +29,27 @@ class Player:
             Good.SUGAR: 0,
             Good.INDIGO: 0
         }
+
+    def __deepcopy__(self, memo):
+        # Hand-rolled clone: planning agents deep-copy the whole game thousands
+        # of times per move, and generic deepcopy's per-object dispatch dominates
+        # that cost. Fields are copied by kind; anything unrecognized falls back
+        # to copy.deepcopy so a future mutable field cannot be silently shared.
+        new = Player.__new__(Player)
+        memo[id(self)] = new
+        nd = new.__dict__
+        for k, v in self.__dict__.items():
+            if k == "island_board":
+                nd[k] = [IslandTile(t.tile_type, t.is_occupied) for t in v]
+            elif k == "city_board":
+                nd[k] = [CityBuilding(b.building_type, b.colonists) for b in v]
+            elif k == "goods":
+                nd[k] = dict(v)
+            elif v is None or isinstance(v, (int, float, str, bool, Enum)):
+                nd[k] = v
+            else:
+                nd[k] = copy.deepcopy(v, memo)
+        return new
 
     @property
     def empty_island_spaces(self) -> int:

@@ -11,6 +11,29 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-08-20 — engine throughput pass (behavior-preserving)
+
+No rule changes. Pure performance refactors, available to every entrant's
+planning agent equally. Behavior is pinned by `tests/test_clone_equivalence.py`
+(hand-rolled clones value-identical to generic `copy.deepcopy` with the hooks
+disabled; fast mask identical to `observe()["action_mask"]` at every decision
+of seeded games; clones share no mutable state with the live game; mid-game
+envs still pickle for the sandbox). Tests: 76 → 88.
+
+* **Hand-rolled `__deepcopy__` on `PuertoRicoGame`, `Player`, and the component
+  dataclasses** (`slots=True` on the latter), replacing generic deepcopy's
+  per-object dispatch; `PuertoRicoEnv.__deepcopy__` copies its bookkeeping
+  dicts by kind and preserves the `infos` ↔ `episode_metrics` aliasing via the
+  memo. `ForwardModel.clone()`: 0.30 ms → 0.049 ms (~6×).
+* **`ForwardModel.action_mask()` / `legal_actions()` fast path** — computes
+  just the mask via `valid_action_mask()` instead of building (and discarding)
+  the full nested observation for every player: 0.042 ms → 0.002 ms (~20×).
+* Net effect on a depth-10 clone+step+mask search workload: ~870 → ~2 900
+  sims/s (measured by `tools/bench_engine.py`, new). `SearchAgent`
+  (node_budget=1500): ~0.30 → ~0.18 s/move. Baseline strength is unchanged
+  (node budgets, not time budgets, set baseline strength — by design);
+  `tools/measure_baselines.py` numbers in docs/BASELINES.md remain valid.
+
 ## 2026-08-14 — correctness, reproducibility and isolation pass
 
 Brought the competition repo in line with the corrections the research engine
