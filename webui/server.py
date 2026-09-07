@@ -32,7 +32,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from puerto_rico import ForwardModel, flatten_observation, make_env
-from puerto_rico.constants import BUILDING_DATA, BuildingType, Good, Role, TileType
+from puerto_rico.constants import BUILDING_DATA, Role
+from puerto_rico.describe import describe_action as get_action_description
+from puerto_rico.records import build_record, save_record
 from agents.base import Agent
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent,
                     RandomAgent, ShippingRushAgent, TradeBuildingAgent)
@@ -49,6 +51,7 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 MOVE_TIME_LIMIT = 1.0          # seconds per move (competition rule)
 SUBMISSIONS_DIR = os.path.join(ROOT, "submissions")
 PPO_CHECKPOINT = os.path.join(ROOT, "training", "checkpoints", "ppo_baseline.pt")
+GAME_RECORDS_DIR = os.path.join(ROOT, "results", "webui_games")
 
 # ── agent registry ───────────────────────────────────────────────────────────
 
@@ -124,11 +127,36 @@ agents = []            # agents[i] = Agent instance, or None for a human seat
 player_types = []      # token per seat ("human" / "random" / "submissions/..:X")
 player_labels = []     # display name per seat
 game_log = []
-undo_stack = []        # [(deepcopy(env), log_copy, chosen_roles_copy)]
+undo_stack = []        # [(deepcopy(env), log_copy, chosen_roles_copy, moves_copy)]
 last_phase = None
 chosen_roles = {}
 last_ai_move = None    # {agent, action, intended, ms, note, substituted}
 _rng = np.random.default_rng()
+
+# Game records: every game runs on an explicit random seed and every applied
+# decision is appended to move_history (kept consistent through undo), so a
+# finished game replays exactly from (seed, actions). Finished games are saved
+# as JSON under results/webui_games/ -- replay one with
+#     python tools/replay_game.py results/webui_games/<file>.json --moves
+# (format and helpers: puerto_rico/records.py).
+game_seed = None
+move_history = []      # [(seat_idx, action), ...] in play order
+game_logged = False
+
+
+def _maybe_log_finished_game():
+    global game_logged
+    if game_logged or game_env is None or not game_env.game.check_game_end():
+        return
+    try:
+        record = build_record(game_env, seed=game_seed, actions=move_history,
+                              player_types=player_types, player_labels=player_labels)
+        path = save_record(record, GAME_RECORDS_DIR)
+        game_log.append(f"--- Game recorded: {os.path.relpath(path, ROOT)} "
+                        f"(replay: python tools/replay_game.py <that file> --moves) ---")
+    except Exception as e:                 # recording must never break play
+        game_log.append(f"--- Game record failed: {e} ---")
+    game_logged = True
 
 
 def bind_agents():
@@ -149,43 +177,6 @@ def _random_legal(mask):
 
 
 # ── action description (English log) ─────────────────────────────────────────
-
-def get_action_description(player_idx, action_idx, env):
-    try:
-        if 0 <= action_idx <= 7:
-            return f"Player {player_idx} selected role {Role(action_idx).name}."
-        elif 8 <= action_idx <= 12:
-            return f"Player {player_idx} drafted plantation {TileType(action_idx - 8).name}."
-        elif action_idx == 13:
-            return f"Player {player_idx} drafted a Quarry tile."
-        elif action_idx == 15:
-            phase = env.game.current_phase
-            return f"Player {player_idx} passed in {phase.name if phase else 'Unknown'} phase."
-        elif 16 <= action_idx <= 38:
-            return f"Player {player_idx} built {BuildingType(action_idx - 16).name}."
-        elif 39 <= action_idx <= 43:
-            return f"Player {player_idx} sold {Good(action_idx - 39).name} to Trading House."
-        elif 44 <= action_idx <= 58:
-            idx = action_idx - 44
-            return f"Player {player_idx} loaded {Good(idx % 5).name} onto Cargo Ship {idx // 5 + 1}."
-        elif 59 <= action_idx <= 63:
-            return f"Player {player_idx} loaded {Good(action_idx - 59).name} via Wharf."
-        elif action_idx == 105:
-            return f"Player {player_idx} used Hacienda to draw an extra plantation."
-        elif 64 <= action_idx <= 68:
-            return f"Player {player_idx} stored {Good(action_idx - 64).name} on Windrose."
-        elif 106 <= action_idx <= 110:
-            return f"Player {player_idx} stored {Good(action_idx - 106).name} in Warehouse."
-        elif 120 <= action_idx <= 125:
-            return f"Player {player_idx} placed a colonist on {TileType(action_idx - 120).name}."
-        elif 140 <= action_idx <= 162:
-            return f"Player {player_idx} placed a colonist on {BuildingType(action_idx - 140).name}."
-        elif 93 <= action_idx <= 97:
-            return f"Player {player_idx} chose {Good(action_idx - 93).name} as Craftsman privilege."
-        return f"Player {player_idx} executed action {action_idx}."
-    except Exception as e:
-        return f"Player {player_idx} executed action {action_idx} (desc error: {e})."
-
 
 def check_phase_transition(env):
     global last_phase, game_log
@@ -285,6 +276,7 @@ def list_agents():
 def init_game():
     global game_env, agents, player_types, player_labels, game_log, undo_stack
     global last_phase, chosen_roles, last_ai_move
+    global game_seed, move_history, game_logged
 
     data = request.json or {}
     num_players = int(data.get("num_players", 3))
@@ -306,7 +298,11 @@ def init_game():
         else:
             player_labels.append(tok.rsplit(":", 1)[-1])
 
-    game_env = make_env(seed=None, num_players=num_players)
+    # explicit random seed so the finished game replays deterministically
+    game_seed = int.from_bytes(os.urandom(4), "little")
+    move_history = []
+    game_logged = False
+    game_env = make_env(seed=game_seed, num_players=num_players)
     bind_agents()
 
     last_phase = game_env.game.current_phase
@@ -329,6 +325,7 @@ def get_state():
 @app.route("/api/action", methods=["POST"])
 def apply_action():
     global game_env, game_log, undo_stack, chosen_roles, last_ai_move
+    global move_history
     if game_env is None:
         return jsonify({"error": "Game not initialized"}), 400
 
@@ -344,7 +341,8 @@ def apply_action():
     if game_env.observe(active_agent)["action_mask"][action_idx] == 0:
         return jsonify({"error": f"Invalid action {action_idx}"}), 400
 
-    undo_stack.append((copy.deepcopy(game_env), list(game_log), dict(chosen_roles)))
+    undo_stack.append((copy.deepcopy(game_env), list(game_log),
+                       dict(chosen_roles), list(move_history)))
     game_log.append(get_action_description(active_idx, action_idx, game_env))
     if 0 <= action_idx <= 7:
         chosen_roles[Role(action_idx).name] = active_idx
@@ -352,10 +350,12 @@ def apply_action():
     try:
         game_env.step(action_idx)
     except Exception as e:
-        game_env, game_log, chosen_roles = undo_stack.pop()
+        game_env, game_log, chosen_roles, move_history = undo_stack.pop()
         bind_agents()
         return jsonify({"error": f"Game engine error: {e}"}), 500
+    move_history.append((active_idx, action_idx))
     check_phase_transition(game_env)
+    _maybe_log_finished_game()
     return jsonify(serialize_state(game_env))
 
 
@@ -411,16 +411,19 @@ def ai_step():
         game_env.step(action)
     except Exception as e:
         return jsonify({"error": f"Game engine error during AI step: {e}"}), 500
+    move_history.append((active_idx, action))
     check_phase_transition(game_env)
+    _maybe_log_finished_game()
     return jsonify(serialize_state(game_env))
 
 
 @app.route("/api/undo", methods=["POST"])
 def undo_turn():
     global game_env, game_log, undo_stack, chosen_roles, last_phase, last_ai_move
+    global move_history
     if not undo_stack:
         return jsonify({"error": "No actions to undo"}), 400
-    game_env, game_log, chosen_roles = undo_stack.pop()
+    game_env, game_log, chosen_roles, move_history = undo_stack.pop()
     bind_agents()                       # re-point agents at the restored game
     last_phase = game_env.game.current_phase
     last_ai_move = None
@@ -429,5 +432,8 @@ def undo_turn():
 
 if __name__ == "__main__":
     os.makedirs(SUBMISSIONS_DIR, exist_ok=True)
-    print("Puerto Rico web UI - open http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    # PORT lets a second instance run beside one you already have open
+    # (the state here is global, so one server = one game).
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Puerto Rico web UI - open http://127.0.0.1:{port}")
+    app.run(host="127.0.0.1", port=port, debug=False)

@@ -120,6 +120,8 @@ tournament/         single-match harness, round-robin runner, rankers, leaderboa
 training/           optional PPO self-play trainer + the bundled 3p RL checkpoint
 webui/              browser UI to play, watch, and debug agents
 examples/           play_one_game.py, run_tournament.py
+tools/              replay_game.py (replay a recorded game), bench2p.py,
+                    bench_engine.py, measure_baselines.py
 submission_template/ copy this to build your competition entry
 submissions/        drop an agent here to debug it in the web UI
 docs/               rules, observation/action encoding, ranking, submission guide

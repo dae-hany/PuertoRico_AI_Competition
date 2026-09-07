@@ -35,6 +35,22 @@ Each agent move is run under the **same rules as the real tournament**:
 This lets you see exactly what the competition harness would do with your agent
 before you submit. The full event log narrates every action in English.
 
+## Game records and replay
+
+Every finished game is saved automatically as a small JSON file under
+`results/webui_games/` — the random seed plus every decision, which is enough to
+replay the game exactly. The event log names the file when the game ends.
+
+```bash
+python tools/replay_game.py results/webui_games/game_<stamp>_<seed>.json --moves     # narrate it
+python tools/replay_game.py results/webui_games/game_<stamp>_<seed>.json --stop 40   # the position after 40 decisions
+```
+
+`--stop N` prints who is to move, the legal actions, and the exact observation
+vector your agent would receive — handy for asking "what did my agent see when
+it played that move?". The format and helpers live in
+[`../puerto_rico/records.py`](../puerto_rico/records.py).
+
 > This is a single-game debug tool with global state — not the competition runner.
 > For official, seat-balanced round-robin ranking, use `tournament/`
 > (`python examples/run_tournament.py`). See
