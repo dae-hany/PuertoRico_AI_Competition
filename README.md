@@ -31,6 +31,8 @@ replay a game, in about ten minutes and with nothing installed.
 > *hard for plain reinforcement learning*: hand-written heuristics and tree search
 > still beat trained RL agents. Building something that beats them is the challenge.
 
+![The web UI: two baseline agents playing a 2-player game](docs/img/webui.png)
+
 ## Quickstart
 
 ```bash
@@ -46,6 +48,7 @@ python tools/play.py --agent submissions/example_agent.py:ExampleAgent   # an ag
 python tools/validate_submission.py submissions/example_agent.py         # the official sandbox check
 python examples/run_tournament.py       # a round-robin + leaderboard for each track
 python webui/server.py                  # browser UI: play / watch / debug (webui extra)
+# then open http://127.0.0.1:5000/?players=2&seats=actionvalue,trade to watch two bots play
 ```
 
 `pip install -e .` is recommended (it makes `agents`, `tournament`, `puerto_rico`

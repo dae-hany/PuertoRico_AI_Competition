@@ -8,6 +8,8 @@ pip install -e ".[webui]"      # or: pip install flask
 python webui/server.py         # open http://127.0.0.1:5000
 ```
 
+![Two baseline agents playing a 2-player game](../docs/img/webui.png)
+
 ## What you can do
 
 - **Pick the player count** (2–5). The competition tracks are **2 Players**
@@ -21,6 +23,12 @@ python webui/server.py         # open http://127.0.0.1:5000
   in a seat's box.
 - **Watch bots play** (set every seat to a bot) with auto-run, or **play yourself**
   by taking a seat. Undo, pass, and restart are available.
+- **Start from a link.** The setup can be filled in from the URL, so a game is
+  shareable: `http://127.0.0.1:5000/?players=2&seats=actionvalue,trade` watches
+  two bots, `?players=3&seats=human,mcts,shipping` seats you against two bots.
+  Seat tokens are the dropdown values (`human`, `random`, `factory`, `trade`,
+  `shipping`, `actionvalue`, `mcts`, `searchlite`, `search`, `ppo`) or a
+  `module:Class` / `file.py:Class` spec; add `&auto=0` to step the bots by hand.
 
 ## Debugging features
 

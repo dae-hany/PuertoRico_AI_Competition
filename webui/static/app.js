@@ -185,9 +185,34 @@ async function fetchAgents() {
         if (res.ok) AGENT_OPTIONS = await res.json();
     } catch (e) { console.warn("Could not fetch agent list:", e); }
 }
+// The setup can be pre-filled and started from the URL, which makes a bot game
+// shareable as a link:  /?players=2&seats=actionvalue,trade  (watch two bots)
+//                       /?players=3&seats=human,mcts,shipping (you vs two bots)
+// Seat tokens are the dropdown values (human, random, factory, trade, shipping,
+// actionvalue, mcts, searchlite, search, ppo) or module:Class / file.py:Class.
+// Add &auto=0 to step the bots by hand instead of auto-running them.
 fetchAgents().then(() => {
+    const params = new URLSearchParams(location.search);
+    const wanted = parseInt(params.get("players"));
+    if (wanted >= 2 && wanted <= 5) {
+        document.querySelectorAll(".count-btn").forEach(b =>
+            b.classList.toggle("active", parseInt(b.dataset.count) === wanted));
+    }
     const active = document.querySelector(".count-btn.active");
-    renderPlayerSetupRows(active ? parseInt(active.dataset.count) : 3);
+    const count = active ? parseInt(active.dataset.count) : 3;
+    renderPlayerSetupRows(count);
+
+    const seats = (params.get("seats") || "").split(",").map(t => t.trim()).filter(Boolean);
+    if (seats.length) {
+        seats.slice(0, count).forEach((tok, i) => {
+            const sel = document.getElementById(`p-type-${i}`);
+            if ([...sel.options].some(o => o.value === tok)) sel.value = tok;
+            else document.getElementById(`p-custom-${i}`).value = tok;
+        });
+        const autoToggle = document.getElementById("auto-ai-toggle");
+        if (autoToggle && params.get("auto") === "0") autoToggle.checked = false;
+        startBtn.click();
+    }
 });
 
 startBtn.addEventListener("click", async () => {
@@ -860,7 +885,7 @@ function renderSelectedPlayerBoard() {
     
     // Update Title with Governor status
     const isGov = (selectedTabIdx === gameState.governor_idx);
-    const label = p.type === "human" ? `Player ${p.player_idx + 1} (Human) Board` : `Player ${p.player_idx + 1} (AI Bot) Board`;
+    const label = p.type === "human" ? `Player ${selectedTabIdx + 1} (Human) Board` : `Player ${selectedTabIdx + 1} (AI Bot) Board`;
     const govBadge = isGov ? `<span style="font-size:0.75rem; background:rgba(234,179,8,0.15); color:var(--accent-gold); padding:2px 8px; border-radius:12px; font-weight:700; border:1px solid rgba(234,179,8,0.3); margin-left:8px; display:inline-flex; align-items:center; gap:4px;">👑 Governor</span>` : '';
     document.getElementById("player-board-title").innerHTML = `${label} ${govBadge}`;
     
