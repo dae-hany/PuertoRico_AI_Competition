@@ -11,6 +11,7 @@ on:
 jobs:
   pytest:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +26,9 @@ jobs:
       - name: "Install (no torch: the PPO tests skip without it)"
         run: |
           python -m pip install --upgrade pip
-          pip install -e . pytest
+          pip install -e . pytest pytest-github-actions-annotate-failures
       - name: Test
-        run: python -m pytest -q
+        # the annotate plugin reports each failed test (name, file, line,
+        # message) as a check annotation on the commit, so a failure can be
+        # read from the Checks tab (and the public API) without opening logs
+        run: python -m pytest -q --durations=10

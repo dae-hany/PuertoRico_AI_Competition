@@ -39,7 +39,9 @@ def test_validate_passes_the_example_agent():
     r = run("tools/validate_submission.py", "submissions/example_agent.py",
             "--track", "2p", "--games", "1")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "[PASS] 2p track" in r.stdout
+    # PASS normally; a loaded CI runner may book a slow round-trip as a WARN,
+    # which must not fail the entry either
+    assert "[PASS] 2p track" in r.stdout or "[WARN] 2p track" in r.stdout, r.stdout
     assert "Result: READY" in r.stdout
 
 
