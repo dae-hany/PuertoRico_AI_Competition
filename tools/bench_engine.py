@@ -3,13 +3,13 @@
 Measures the operations that set the self-play/search budget:
 
   clone_live   ForwardModel.clone() of the live model (deepcopy + determinize)
-  clone_child  clone() of a clone (deepcopy only) — the in-tree operation
+  clone_child  clone() of a clone (deepcopy only) - the in-tree operation
   fm_mask      ForwardModel.action_mask()  (the mask-only fast path)
   env_mask     env.unwrapped.valid_action_mask()  (pure mask computation)
   fm_obs       ForwardModel.observation()  (observe + flatten)
   step         ForwardModel.step() through random games (steps/s, games/s)
   mcts_proxy   clone root + walk D random steps querying the mask each ply
-               (sims/s — the number that becomes your search budget)
+               (sims/s - the number that becomes your search budget)
 
 Run before and after any engine performance work:
 

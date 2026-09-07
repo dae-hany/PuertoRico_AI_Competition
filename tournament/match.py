@@ -102,7 +102,9 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
     Returns:
         dict with ``scores``, ``tiebreak``, ``ranks`` (0 = best), ``winners``,
         ``steps``, ``timeouts``, ``illegal``, ``tampered`` (per-player counts),
-        ``truncated``, and ``seed``.
+        ``truncated``, ``seed``, and ``actions`` — every applied decision as
+        ``(seat, action)`` pairs, so the game can be stored and replayed
+        (see :mod:`puerto_rico.records`).
     """
     n = len(agents)
     env = make_env(seed=seed, num_players=n)
@@ -120,6 +122,7 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
     illegal = [0] * n
     tampered = [0] * n
     steps = 0
+    actions = []                            # (seat, applied action) in play order
 
     while env.agents and steps < max_steps:
         name = env.agent_selection
@@ -158,6 +161,7 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
             illegal[p] += 1
 
         env.step(action)
+        actions.append((p, action))
         steps += 1
 
     truncated = bool(env.agents)          # hit the cap instead of ending naturally
@@ -182,4 +186,5 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
         "illegal": illegal,
         "tampered": tampered,
         "truncated": truncated,
+        "actions": actions,
     }

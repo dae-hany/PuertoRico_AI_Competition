@@ -74,6 +74,21 @@ def test_stop_after_leaves_the_next_player_to_move():
         replay_record({**record, "actions": record["actions"] + [record["actions"][-1]]})
 
 
+def test_a_play_game_result_becomes_a_replayable_record():
+    from agents import RandomAgent
+    from puerto_rico.records import record_from_result
+    from tournament.match import play_game
+
+    result = play_game([RandomAgent(seed=0), RandomAgent(seed=1)], seed=5)
+    assert len(result["actions"]) == result["steps"]
+    record = record_from_result(result, 2, player_types=["Random", "Random"])
+    assert record["scores"] == [[result["scores"][i], result["tiebreak"][i]] for i in range(2)]
+    assert replays_exactly(record)
+
+    with pytest.raises(ValueError, match="without a seed"):
+        record_from_result({**result, "seed": None}, 2)
+
+
 def test_describe_action_names_the_role():
     assert describe_action(0, 2) == "Player 0 selected role BUILDER."
     assert "Unknown phase" in describe_action(1, 15)      # pass, no env given

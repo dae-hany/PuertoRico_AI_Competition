@@ -7,20 +7,31 @@ Your entry is a single Python class that implements `act`.
 1. Copy `my_agent.py` and rename the class and its `name` attribute.
 2. Implement `act(self, observation, action_mask) -> int` — return one legal
    action index (`action_mask[a] == 1`). The starter plays random legal moves.
-3. Test it locally against the baselines:
+3. Test it locally against the baselines (from the repo root):
+
+   ```bash
+   python tools/play.py --agent submission_template/my_agent.py:MyAgent
+   python tools/play.py --agent submission_template/my_agent.py:MyAgent --players 3 --vs all
+   ```
+
+   or from Python:
 
    ```python
    from tournament.match import play_game
-   from agents import ActionValueAgent, RandomAgent
-   from submission_template.my_agent import MyAgent
+   from agents import ActionValueAgent
+   from submission_template.my_agent import MyAgent      # run from the repo root
 
    # 2p track — 1 vs 1 (pass 2 agents); 3p track — pass 3 agents
    result = play_game([MyAgent(), ActionValueAgent()], seed=0)
    print(result["scores"], result["winners"])
    ```
 
-   Or add `MyAgent` to the `pool` in `examples/run_tournament.py` and run it to
-   see your win rate on each track's leaderboard.
+4. Before you submit, run the official sandbox check and make sure it ends
+   with `Result: READY`:
+
+   ```bash
+   python tools/validate_submission.py submission_template/my_agent.py:MyAgent
+   ```
 
 ## Rules in one line
 

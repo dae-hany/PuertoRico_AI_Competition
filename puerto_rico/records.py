@@ -19,7 +19,9 @@ A record is a plain JSON-serialisable dict::
     }
 
 The web UI (``webui/server.py``) writes one of these for every finished game
-under ``results/webui_games/``; ``tools/replay_game.py`` replays them.
+under ``results/webui_games/``; ``tools/play.py --record`` and the ladder
+(``tools/run_ladder.py``) write them from ``play_game`` results; and
+``tools/replay_game.py`` replays any of them.
 """
 from __future__ import annotations
 
@@ -69,11 +71,43 @@ def build_record(env: PuertoRicoEnv, seed: int, actions, player_types=None,
     }
 
 
-def save_record(record: dict, directory: str) -> str:
+def record_from_result(result: dict, num_players: int, player_types=None,
+                       player_labels=None) -> dict:
+    """A record from a :func:`tournament.match.play_game` result.
+
+    ``play_game`` returns the applied ``actions`` and the game ``seed``; the
+    scores it reports are ``[vp, tiebreak]`` per seat (the leading two entries
+    of ``game.get_scores()``), which is what :func:`replays_exactly` compares.
+    """
+    if result.get("seed") is None:
+        raise ValueError("the game was played without a seed and cannot be replayed")
+    vp = [int(v) for v in result["scores"]]
+    tb = [int(t) for t in result["tiebreak"]]
+    player_types = list(player_types or [])
+    human_seats = [i for i, t in enumerate(player_types) if t == "human"]
+    winners = [int(w) for w in result["winners"]]
+    return {
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "seed": int(result["seed"]),
+        "num_players": int(num_players),
+        "player_types": player_types,
+        "player_labels": list(player_labels or []),
+        "actions": [[int(s), int(a)] for s, a in result["actions"]],
+        "scores": [[vp[i], tb[i]] for i in range(num_players)],
+        "winners": winners,
+        "human_seats": human_seats,
+        "human_won": bool(set(human_seats) & set(winners)),
+        "truncated": bool(result.get("truncated", False)),
+    }
+
+
+def save_record(record: dict, directory: str, filename: str = None) -> str:
     """Write ``record`` as JSON into ``directory``; returns the file path."""
     os.makedirs(directory, exist_ok=True)
-    stamp = time.strftime("%Y%m%d_%H%M%S")
-    path = os.path.join(directory, f"game_{stamp}_{record['seed'] % 100000}.json")
+    if filename is None:
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"game_{stamp}_{record['seed'] % 100000}.json"
+    path = os.path.join(directory, filename)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(record, f)
     return path
@@ -121,6 +155,7 @@ def replays_exactly(record: dict) -> bool:
         env = replay_record(record)
     except ReplayError:
         return False
-    if "scores" not in record:
+    if not record.get("scores"):
         return True
-    return [list(map(int, s)) for s in env.game.get_scores()] == record["scores"]
+    k = len(record["scores"][0])           # records may store only (vp, tiebreak)
+    return [list(map(int, s))[:k] for s in env.game.get_scores()] == record["scores"]

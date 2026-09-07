@@ -30,20 +30,22 @@ layout below lets you build features if you want to.
 | `0–7` | Role pick | choose a role: 0 Settler, 1 Mayor, 2 Builder, 3 Craftsman, 4 Trader, 5 Captain, 6 Prospector‑1, 7 Prospector‑2 |
 | `8–12` | Settler | take a face‑up plantation: 8 Coffee, 9 Tobacco, 10 Corn, 11 Sugar, 12 Indigo |
 | `13` | Settler | take a Quarry |
-| `105` | Settler | Hacienda: draw one extra random plantation |
+| `15` | any | **Pass** / decline the current optional action (the most common action) |
 | `16–38` | Builder | build the building of type `a − 16` (BuildingType 0–22) |
 | `39–43` | Trader | sell the good `a − 39` (Good 0–4) to the trading house |
 | `44–58` | Captain | load a good on a ship: `ship = (a − 44) // 5`, `good = (a − 44) % 5` |
 | `59–63` | Captain | load good `a − 59` using your **Wharf** |
 | `64–68` | Captain (store) | keep good `a − 64` at the Windrose / Office |
-| `106–110` | Captain (store) | keep good `a − 106` in your Warehouse |
 | `93–97` | Craftsman | choose your privilege good `a − 93` |
+| `105` | Settler | Hacienda: draw one extra random plantation |
+| `106–110` | Captain (store) | keep good `a − 106` in your Warehouse |
 | `120–125` | Mayor | place a colonist on an island tile of type `a − 120` (TileType 0–5) |
 | `140–162` | Mayor | place a colonist on a building of type `a − 140` (BuildingType 0–22) |
-| `15` | any | Pass / decline the current optional action |
 
-Index ranges not listed are never legal; the `action_mask` is always the
-authoritative source of legality.
+The indices in the gaps (`14`, `69–92`, `98–104`, `111–119`, `126–139`,
+`163–199`) are unused and never legal; the `action_mask` is always the
+authoritative source of legality. `puerto_rico.describe_action(seat, a)` turns
+any index into an English sentence, which is handy in logs.
 
 **Good order:** `0 Coffee, 1 Tobacco, 2 Corn, 3 Sugar, 4 Indigo`.
 **TileType order:** `0 Coffee, 1 Tobacco, 2 Corn, 3 Sugar, 4 Indigo plantation, 5 Quarry`.
@@ -131,6 +133,37 @@ baseline is trained and played through this rotation
 | 72 | `vp_chips` (1) | VP chips the player has earned (from shipping) |
 
 So player *i*'s `doubloons` is at absolute index `74 + 73*i + 23`, and so on.
+
+### Worked example: reading an observation
+
+```python
+from puerto_rico import make_env, flatten_observation
+from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM   # 74, 73
+
+env = make_env(seed=0, num_players=2)
+raw = env.observe(env.agent_selection)
+obs = flatten_observation(raw["observation"])      # float32[220]: what act() receives
+
+me = int(obs[36])                                   # global: current_player
+print("to move: player", me, "| roles available:", obs[59:67].astype(int))
+for i in range(env.num_players):
+    b = GLOBAL_DIM + PER_PLAYER_DIM * i             # start of player i's block
+    print(f"player {i}{' (me)' if i == me else '    '}: "
+          f"{int(obs[b + 23])} doubloons, goods {obs[b + 25:b + 30].astype(int)}, "
+          f"{int(obs[b + 72])} VP chips, {int(obs[b + 24])} free city spaces")
+```
+
+prints, at the first decision of the seed-0 game,
+
+```
+to move: player 1 | roles available: [1 1 1 1 1 1 1 0]
+player 0    : 3 doubloons, goods [0 0 0 0 0], 0 VP chips, 12 free city spaces
+player 1 (me): 3 doubloons, goods [0 0 0 0 0], 0 VP chips, 12 free city spaces
+```
+
+(for this seed the governor, who picks the first role, is player 1; the trailing
+`0` in `roles_available` is the second Prospector, which the 2-player game
+removes).
 
 For the meaning of roles, goods, buildings, and scoring, see
 [`GAME_RULES.md`](GAME_RULES.md).

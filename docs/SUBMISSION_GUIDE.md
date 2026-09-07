@@ -11,7 +11,7 @@ difference your code sees is the **observation length** (220 in 2p, 293 in 3p).
 ## 1. Set up
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/dae-hany/PuertoRico_AI_Competition.git
 cd PuertoRico_AI_Competition
 python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e .                                 # deps + importable packages
@@ -65,7 +65,21 @@ The starter returns a random legal move — replace it with real logic.
 
 ## 4. Test against the baselines
 
-The seat count is just how many agents you pass to `play_game`:
+One command plays seat-rotated games under the competition rules and reports
+your win rate, VP margin, and per-move time against each opponent:
+
+```bash
+python tools/play.py --agent my_agent.py:MyAgent                          # 2p, vs ActionValue and TradeBuilding
+python tools/play.py --agent my_agent.py:MyAgent --vs Search --games 20   # the 2p target to beat
+python tools/play.py --agent my_agent.py:MyAgent --players 3 --vs all     # 3p, every baseline
+python tools/play.py --agent my_agent.py:MyAgent --record                 # keep replays (tools/replay_game.py)
+```
+
+Opponents are named as in the table in [BASELINES.md](BASELINES.md) (Random,
+Factory, ShippingRush, TradeBuilding, ActionValue, MCTS, SearchLite, Search,
+PPO) or given as another `file.py:Class`.
+
+From Python, the seat count is just how many agents you pass to `play_game`:
 
 ```python
 from tournament.match import play_game
@@ -82,7 +96,13 @@ print(result["scores"], "winner:", result["winners"])
 ```
 
 Or add `MyAgent` to the `pool` in [`examples/run_tournament.py`](../examples/run_tournament.py)
-and run it to see your win rate on each track's leaderboard.
+and run it to see your win rate on each track's leaderboard. To look at a game
+your agent lost, decision by decision, replay it:
+
+```bash
+python tools/replay_game.py results/games/<file>.json --moves      # narrate every decision
+python tools/replay_game.py results/games/<file>.json --stop 40    # the position (and observation) after 40 decisions
+```
 
 **How strong are the baselines?** Measured numbers, per track, are in
 [BASELINES.md](BASELINES.md) — and the ordering is **not the same in both
@@ -106,7 +126,18 @@ legal action. Going over the limit, returning an illegal action, or raising an
 exception forfeits that move to a random legal one. Full rules:
 [COMPETITION_RULES.md](COMPETITION_RULES.md).
 
-## 7. Submit
+## 7. Validate, then submit
+
+Run the official sandbox check first. It loads your file, scans its imports,
+and plays games with your agent in its own process under the real deadline,
+exactly as the tournament will:
+
+```bash
+python tools/validate_submission.py my_agent.py:MyAgent
+```
+
+It prints a PASS / WARN / FAIL checklist and ends with `Result: READY` (exit
+status 0) when nothing failed. Fix every FAIL; read every WARN.
 
 Submit your single agent file (the one class) **per track you are entering** —
 the 2p track, the 3p track, or both (the same file is fine if your agent handles
@@ -117,4 +148,7 @@ both observation lengths). Make sure it:
 - sets a distinctive `name` (shown on the leaderboard);
 - states which track(s) it is for.
 
-Follow the channel and deadline given by your competition organizer.
+Where and when to submit is announced in the README's *The competition*
+section. During the competition window the organizer runs a weekly ladder over
+every entry received so far and publishes the standings and replays under
+`leaderboard/`, so submit early and resubmit whenever you improve.

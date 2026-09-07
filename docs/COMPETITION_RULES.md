@@ -92,9 +92,14 @@ class MyAgent(Agent):
 
 - Each track is run **separately**. Within a track your agent's opponents
   include the **baseline agents** bundled in this repo (Random, Factory,
-  TradeBuilding, ShippingRush, ActionValue, MCTS) plus the other submissions to
+  TradeBuilding, ShippingRush, ActionValue, MCTS, and in the 2p track also the
+  alpha-beta baselines SearchLite and Search) plus the other submissions to
   that track. The **PPO** baseline runs in the **3p track only** (its checkpoint
-  is 293-dim); the other baselines play both tracks.
+  is 293-dim); the heuristics and MCTS play both tracks.
+- The runner is `tools/run_ladder.py`: it seats every entry in the official
+  sandbox, plays the round-robin, and writes the standings and every game's
+  replay. The same command produces the weekly ladder during the competition
+  window and the final standings.
 - The exact number of games per seating and the random seeds are set by the
   organizer; the tournament is produced by the code in `tournament/` — the same
   runner with `n_seats=2` or `n_seats=3` (see [Ranking](RANKING.md) and
