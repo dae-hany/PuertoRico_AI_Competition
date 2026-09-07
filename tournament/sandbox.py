@@ -299,7 +299,10 @@ class AgentWorker:
             self._teardown()
             raise SandboxError(f"{self.spec}: worker pipe closed ({exc})") from exc
 
-        if not self._conn.poll(deadline_s):
+        # A budget that has already expired is a timeout by definition, even if
+        # the reply is already sitting in the pipe (poll() treats a negative
+        # timeout as "check now", which let a fast worker slip through).
+        if deadline_s <= 0 or not self._conn.poll(deadline_s):
             # Over budget: kill it now so a runaway agent cannot keep burning
             # CPU while the rest of the tournament waits behind it.
             self._teardown()
