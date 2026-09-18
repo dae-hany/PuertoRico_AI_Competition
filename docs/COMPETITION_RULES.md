@@ -1,8 +1,15 @@
 # Puerto Rico AI Competition — Rules
 
-These rules govern the Puerto Rico AI competition. The **same rules** apply both
-to the IEEE CoG 2027 competition and to the university "Game AI" course final
-project.
+These rules govern the Puerto Rico AI competition: the engine, what you submit,
+the time limit, legality, and how the official run is executed.
+
+They are also the technical rules of the **course edition** currently running —
+the 2p track as the final project of the Reinforcement Learning course at
+Chonnam National University. That edition changes a few things on top (it is 2p
+only, ranks by win rate rather than Elo, allows one weight file, and asks for a
+write-up alongside the agent): see **[COURSE_CNU_2026.md](COURSE_CNU_2026.md)**,
+which takes precedence for students of that course. Everything not listed there
+is governed by this page.
 
 ## Tracks
 

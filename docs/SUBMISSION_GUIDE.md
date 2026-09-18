@@ -3,6 +3,11 @@
 Build an agent that plays Puerto Rico, test it against the baselines, and submit
 it. You only need to write one method: `act`.
 
+> Taking the Chonnam National University **Reinforcement Learning** course? The
+> 2p track is your final project, and it adds a few rules to this guide (what
+> goes in the zip, the weight file, win-rate ranking, the ladder rounds):
+> [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
+
 The competition has **two tracks** — **2p** (1‑vs‑1) and **3p** (3‑player) — and
 each is a **separate submission**. You can enter one or both, with a different
 agent per track if you like. The interface is the same in both tracks; the only

@@ -16,8 +16,11 @@ You may enter **either track or both**; each track is a **separate submission**
 (among other things, the observation length differs — 220 in 2p, 293 in 3p). The
 rules, engine, and action space are otherwise shared.
 
-This repository is used for the **IEEE CoG 2027 competition** and as the final
-project of a university **Game AI** course (identical rules). Everything — the
+The competition **running now** is the final project of the **Reinforcement
+Learning** course at **Chonnam National University** (2p track, autumn 2026) —
+see [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md) if you are taking it. A
+public **IEEE CoG 2027** edition is planned on the same engine and the same
+technical rules; its dates will be announced here. Everything — the
 engine, the agents, the docs — is in English so anyone can take part. The engine
 is a standard [PettingZoo](https://pettingzoo.farama.org/) AEC environment
 (`puerto_rico/env.py`), so multi-agent RL tooling can drive it directly.
@@ -155,8 +158,9 @@ webui/              browser UI to play, watch, and debug agents
 examples/           first_agent.ipynb (Colab), play_one_game.py, run_tournament.py
 tools/              play.py (your agent vs the baselines), validate_submission.py
                     (the official sandbox check), replay_game.py, run_ladder.py
-                    (organizer: one ladder round), bench2p.py, bench_engine.py,
-                    measure_baselines.py
+                    (organizer: one ladder round), course_ladder.py (organizer:
+                    a course cohort — zip intake, parallel games, win-rate
+                    board), bench2p.py, bench_engine.py, measure_baselines.py
 leaderboard/        ladder standings and replays, published during the window
 submission_template/ copy this to build your competition entry
 submissions/        drop an agent here to debug it in the web UI
@@ -170,6 +174,12 @@ tests/              pytest suite
   seat-balanced round-robin of every entry against every other entry and the
   bundled baselines, ranked by Elo (2p) or TrueSkill (3p); the rules are in
   [docs/COMPETITION_RULES.md](docs/COMPETITION_RULES.md).
+- **Running now: the course edition.** The 2p track is the final project of the
+  Reinforcement Learning course at Chonnam National University (autumn 2026).
+  Its extra rules — win-rate ranking, one weight file, the required write-up,
+  and the ladder rounds before the deadline — are in
+  [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
+  for students of that course.
 - **Window.** The competition runs for about three months. The dates of the
   IEEE CoG 2027 edition will be announced here.
 - **Weekly ladder.** During the window the organizer runs every entry received
