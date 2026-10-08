@@ -41,12 +41,12 @@ The engine indexes roles **0–7** (Prospector‑2 only appears with 5 players):
 
 | # | Role | Action (all players) | Chooser's privilege |
 |---|------|----------------------|---------------------|
-| 0 | Settler | Take one plantation tile (or a **Quarry**, which discounts buildings) onto your island. The **Hacienda** building lets you draw an extra random plantation. | Choice of tile / extra benefits via buildings |
-| 1 | Mayor | Distribute new **colonists** (workers) from the colonist ship onto plantations and buildings. A tile or building only works if **staffed** by a colonist. | First / extra colonist |
-| 2 | Builder | Buy **one building** with doubloons (quarries you own reduce the cost). | Build at a discount |
-| 3 | Craftsman | Every player produces goods they have capacity for (staffed plantation **and** staffed production building). | Produce one extra **privilege good** of their choice |
-| 4 | Trader | Sell **one** good to the trading house for doubloons. Prices rise with good value; the house holds up to **4** goods. | Trading priority |
-| 5 | Captain | Ship goods onto the cargo ships for VP chips (**1 VP chip per good shipped**). | Shipping priority |
+| 0 | Settler | Take one **face‑up plantation** tile onto your island (or pass). The unpicked face‑up tiles are then discarded and new ones are dealt. The **Hacienda** lets you also draw an extra random plantation; the **Construction Hut** lets you take a Quarry instead. | May take a **Quarry** instead of a plantation |
+| 1 | Mayor | The colonists on the colonist ship are handed out one at a time, starting with the chooser; then every player (re)places all of their colonists onto plantations, quarries and buildings. A tile or building only works if **staffed**. Afterwards the ship is refilled with one colonist per empty building circle (at least one per player). | Takes **1 extra colonist** from the supply |
+| 2 | Builder | Buy **one building** with doubloons, or pass (staffed quarries reduce the cost; you cannot own two of the same building). | Pays **1 doubloon less** |
+| 3 | Craftsman | Every player produces goods they have capacity for (staffed plantation **and** staffed production building), automatically. | Takes **1 extra good** of a kind they just produced |
+| 4 | Trader | Sell **one** good to the trading house for doubloons, or pass. A kind already in the house cannot be sold (unless you have an Office); the house holds **4** goods and is emptied when full at the end of the phase. | Receives **+1 doubloon** on their sale |
+| 5 | Captain | Ship goods onto the cargo ships for VP chips (**1 VP chip per good shipped**). Loading is **compulsory** while you can load; see [Shipping](#shipping-captain-details). | **+1 VP** on their first load (once per phase) |
 | 6–7 | Prospector‑1 / ‑2 | (No shared action.) | Chooser simply gains **one doubloon** |
 
 ## Goods
@@ -101,7 +101,8 @@ colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
 | 16 | Harbor | 8 | 3 | 1 | Captain: **+1 VP** each time you ship goods. |
 | 17 | Wharf | 9 | 3 | 1 | Captain: your **own private ship** (one good type, any amount), once per Captain phase. |
 
-**Large buildings** — each costs **10**, is worth **4 VP**, capacity 1, and gives
+**Large buildings** — each costs **10**, is worth **4 VP**, capacity 1, takes
+**two** city spaces, and gives
 an **end‑game bonus** (only if staffed):
 
 | # | Building | End‑game bonus (exact) |
@@ -114,7 +115,7 @@ an **end‑game bonus** (only if staffed):
 
 ### Money, colonists, and quarries
 
-- **Doubloons** are money (you start with 2). You spend them on buildings and gain
+- **Doubloons** are money (each player starts with **3 in the 2p game** and 2 in the 3p game). You spend them on buildings and gain
   them from the Trader, Prospector, unpicked‑role bonuses, and the Factory.
 - **Colonists** are workers. The Mayor hands them out from the **colonist ship**,
   which is refilled from the supply each round. A plantation or building does
@@ -125,9 +126,18 @@ an **end‑game bonus** (only if staffed):
 
 ## Shipping (Captain) details
 
-There are **3 cargo ships** with fixed capacities, plus per‑player options
-(Harbor, Wharf). Each ship can hold **only one good type at a time**. You earn
-**1 VP chip per good shipped**.
+There are **2 cargo ships** in the 2p game (capacities **4** and **6**) and
+**3** in the 3p game (4, 5, 6), plus per‑player options (Harbor, Wharf). You earn
+**1 VP chip per good shipped**. Starting with the chooser, players take turns
+loading **one kind of good per turn** until nobody can load any more:
+
+- Each ship holds **only one good type at a time**, and a good type already on
+  one ship cannot be loaded onto another.
+- Loading is **compulsory**: if you can load something, you must. You choose the
+  good type, but you must use the ship that takes the **most** of it, and you
+  load as many of that type as fit.
+- At the end of the phase each player keeps **one** good (more with a
+  Warehouse); the rest go back to the supply. Full ships are then emptied.
 
 ## Game end
 
@@ -151,6 +161,7 @@ The two tracks share every rule above; they differ only in setup **quantities**.
 | Starting doubloons (each) | 3 | 2 |
 | Cargo ships | 4 / 6 (two ships) | 4 / 5 / 6 |
 | Quarries available | 5 | 8 |
+| Goods supply (Coffee / Tobacco / Corn / Sugar / Indigo) | 7 / 7 / 8 / 9 / 9 | 9 / 9 / 10 / 11 / 11 |
 | Face‑up plantations each Settler round | 3 | 4 |
 | Initial plantations | governor Indigo, other Corn | governor + 2nd Indigo, 3rd Corn |
 | Role tiles on the table | 7 (one Prospector); 6 picked/round | 6; 3 picked/round |
