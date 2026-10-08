@@ -13,7 +13,8 @@ public IEEE CoG edition follow COMPETITION_RULES.md alone.)
 | | Course (this page) | Public competition |
 |---|---|---|
 | Track | **2p only** | 2p and 3p |
-| Ranking | **win rate**, students' games only | Elo (2p) / TrueSkill (3p) |
+| Ranking | **win count** (a draw is ½), students' games only | Elo (2p) / TrueSkill (3p) |
+| Grade | from the **win count**, not from the rank | — |
 | Weight file | **one file allowed** beside the agent | no disk I/O |
 | Deliverables | agent + README + 1–2 page write-up | agent file |
 | Ladder | 7 rounds before the deadline | weekly during the window |
@@ -28,7 +29,9 @@ One **zip** named `<student id>_<name>.zip`, containing:
 2. **A README** — how to run it, what it depends on, and whether it ships a
    weight file.
 3. **A write-up, 1–2 pages** — how the agent works, why you designed it that
-   way, and what you measured.
+   way, and what you measured. It carries no points of its own, but the
+   write-up and the code are graded as one submission: **an entry without a
+   write-up receives 0 points**.
 4. **Optionally one weight file** (see below).
 
 Set a distinctive `name` on your class. That name, not your student id, is what
@@ -72,15 +75,30 @@ policy network, self-play, a learned evaluation inside a search — is what the
 assignment is aiming at. See the "Recommended approach" section of the
 [README](../README.md) and [SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md).
 
-## How you are ranked
+## How you are ranked and graded
 
-- Every entry plays a **seat-balanced round-robin** against every other entry.
-- The rank is the **win rate**: wins and losses are counted, a draw counts as
-  half a win, and the highest rate comes first.
-- **Only games between students count** toward the rank. The bundled baselines
-  are played too, as a fixed reference point, and shown in a separate column.
+- Every entry plays a **seat-balanced round-robin** against every other entry,
+  with enough games per pair that a single lucky game decides nothing. Every
+  entry plays the **same number of games**.
+- Each game is a **win (1)**, a **draw (½)** or a **loss (0)**. Your **win
+  count** is your wins plus half your draws.
+- **Only games between students count.** The bundled baselines are played too,
+  as a fixed reference point, and shown in a separate column.
+- The final standings list every entry from **1st to nth** by win count, with
+  its wins, draws and losses. Because every entry plays the same number of
+  games, this is the same order as the win rate.
 - Timeouts and illegal moves are not scored separately — they cost you the
   moves they replace, and therefore games.
+
+### Your grade follows your win count, not your rank
+
+The grade is a continuous function of the win count, so one more win is worth
+one game's share of the grade and nothing more. Two entries with 890 and 889
+wins sit one place apart on the board but receive almost the same grade,
+whereas a grade by rank could put a whole grade step between them. The formula
+that turns a win count into points will be announced together with the
+deadline. The write-up carries no points of its own, but it and the code form
+one submission: **an entry without a write-up receives 0 points**.
 
 The organizer runs this with `tools/course_ladder.py`, which also records Elo
 for its own analysis; the published board shows wins, losses and win rate only.
@@ -112,7 +130,7 @@ Ladder results do **not** count toward your grade. Resubmission is free and the
 
 ```bash
 python tools/play.py --agent my_agent.py:MyAgent --vs Search --games 20
-python tools/validate_submission.py my_agent.py:MyAgent
+python tools/validate_submission.py my_agent.py:MyAgent --track 2p
 ```
 
 The last line of the validator must read `Result: READY`. Fix every FAIL, and
