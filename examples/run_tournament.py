@@ -55,7 +55,8 @@ def run_track(n_seats: int):
         make_pool(),
         games_per_seating=1,        # raise for tighter confidence intervals
         seed=0,
-        time_limit_s=1.0,
+        # time_limit_s defaults to 0.1 s per decision (the competition rule);
+        # the bundled baselines in this pool keep their own 1 s budget.
         verbose=True,
         n_seats=n_seats,
     )

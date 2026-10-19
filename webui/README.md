@@ -35,7 +35,8 @@ python webui/server.py         # open http://127.0.0.1:5000
 Each agent move is run under the **same rules as the real tournament**:
 
 - the move is **timed**, and the decision time (ms) is shown for the last AI move;
-- if a move **exceeds the 1 s budget**, **returns an illegal action**, or **raises**,
+- if a move **exceeds the 0.1 s budget** (a bundled baseline has its own 1 s),
+  **returns an illegal action**, or **raises**,
   it is replaced by a random legal move — and the substitution (with the reason
   and the action your agent *intended*) is flagged in the log and the
   "Last AI move" line.

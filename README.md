@@ -94,7 +94,7 @@ python tools/validate_submission.py my_agent.py:MyAgent                 # plays 
 
 `play.py` plays seat-rotated games under the competition rules and prints, per
 opponent, your win rate, mean VP margin, and per-move time, so you can see how
-close to the budget (1 s; 0.1 s in the CNU course, `--time-limit 0.1`) you are. `validate_submission.py` runs your file the way
+close to the 0.1 s budget you are. `validate_submission.py` runs your file the way
 the official run does — its own process, killed at the deadline — and prints a
 PASS / WARN / FAIL checklist (imports, name, timeouts, illegal moves) with exit
 status 0 when the entry is ready. Any recorded game (`--record`, or every game
@@ -140,7 +140,9 @@ Puerto Rico 1‑vs‑1 is a two-player, winner-takes-all (≈ zero-sum),
 plantation draw order) — exactly where **adversarial search** shines.
 `SearchAgent` is a clean, readable alpha‑beta reference you can **play against,
 study, and improve**. Its strength is set by a **node budget** (not wall-clock),
-so it plays the *same* move on any hardware — fair to compare against. See
+so it plays the *same* move on any hardware — fair to compare against. (At 1500
+nodes it needs more than an entrant's 0.1 s per decision; as a bundled baseline
+it keeps its own 1 s budget, but an entry built on it must use fewer nodes.) See
 **[docs/SEARCH_BASELINE_2P.md](docs/SEARCH_BASELINE_2P.md)** for how it works and
 a ranked list of concrete ways to make it stronger (your opportunity as an
 entrant).
@@ -171,15 +173,15 @@ tests/              pytest suite
 
 ## The competition
 
-- **Format.** Two tracks, 2p and 3p, one agent file per track. Each track is a
-  seat-balanced round-robin of every entry against every other entry and the
-  bundled baselines, ranked by Elo (2p) or TrueSkill (3p); the rules are in
-  [docs/COMPETITION_RULES.md](docs/COMPETITION_RULES.md).
+- **Format.** Two tracks, 2p and 3p, one agent file per track, **0.1 s per
+  decision**. Each track is a seat-balanced round-robin of every entry against
+  every other entry and the bundled baselines, ranked by Elo (2p) or TrueSkill
+  (3p); the rules are in [docs/COMPETITION_RULES.md](docs/COMPETITION_RULES.md).
 - **Running now: the course edition.** The 2p track is the final project of the
   Reinforcement Learning course at Chonnam National University (autumn 2026).
-  Its extra rules — 0.1 s per decision, ranking by wins and rank in games
-  between students, one weight file, a code zip and a separate report and
-  presentation zip, and four ladder rounds that publish only wins and rank — are
+  Its extra rules — ranking by wins and rank in games between students, one
+  weight file, a code zip and a separate report and presentation zip, and four
+  ladder rounds that publish only wins and rank — are
   in [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
   for students of that course.
 - **Window.** The competition runs for about three months. The dates of the

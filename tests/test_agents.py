@@ -97,9 +97,11 @@ def test_mcts_determinizes_once_per_move(num_players, seed, sims):
     assert result["illegal"][0] == 0, "MCTS played a move the engine refused"
 
 
-def test_mcts_default_budget_fits_the_competition_time_limit():
-    """The bundled baseline has to obey the rule entrants are held to."""
+def test_mcts_default_budget_fits_the_baseline_time_limit():
+    """The bundled baseline has to obey its own budget (1 s) with headroom."""
+    from tournament.match import BASELINE_TIME_LIMIT_S
     agent = MctsAgent()
+    assert BASELINE_TIME_LIMIT_S == 1.0
     assert agent.num_simulations <= 60, (
         "the default budget must leave headroom under 1 s/move on a slow machine")
 

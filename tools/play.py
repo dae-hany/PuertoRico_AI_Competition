@@ -4,7 +4,7 @@
     python tools/play.py --agent my_agent.py:MyAgent --vs Search --games 20
     python tools/play.py --agent my_agent.py:MyAgent --players 3 --vs ShippingRush,ActionValue
     python tools/play.py --agent my_agent.py:MyAgent --vs all --record
-    python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1 --record   # CNU course
+    python tools/play.py --agent my_agent.py:MyAgent --games 20 --record
 
 --agent   your agent as  path/to/file.py:ClassName  (or module:ClassName),
           or the name of a bundled baseline (Random, Factory, ShippingRush,
@@ -17,13 +17,13 @@
 --record  save every game under results/games/ so you can replay one with
           python tools/replay_game.py <file> --moves
 
-Games are played in-process under the competition rules (--time-limit per
-move: 1 s by default, 0.1 s in the CNU course; a late move, an illegal move or
-an exception is replaced by a random legal move). The limit applies to every
-seat, so an opponent that needs more time (Search, MCTS at 0.1 s) plays some
-moves at random; the run then prints a note. The per-move times printed are
-your agent's real wall-clock cost, so you can see how close to the budget you
-are before you submit. For the official sandbox (your agent
+Games are played in-process under the competition rules (0.1 s per decision,
+--time-limit; a late move, an illegal move or an exception is replaced by a
+random legal move). The bundled baselines are reference opponents with their
+own 1 s budget (docs/COMPETITION_RULES.md); if one still runs out of time, the
+run prints a note. The per-move times printed are your agent's real
+wall-clock cost, so you can see how close to the budget you are before you
+submit. For the official sandbox (your agent
 in its own process, killed at the deadline) run tools/validate_submission.py.
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ if ROOT not in sys.path:
 from agents.registry import DEFAULT_OPPONENTS, baseline_names, resolve  # noqa: E402
 from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM  # noqa: E402
 from puerto_rico.records import record_from_result, save_record  # noqa: E402
-from tournament.match import play_game  # noqa: E402
+from tournament.match import TIME_LIMIT_S, play_game, seat_time_limits  # noqa: E402
 
 
 class Timed:
@@ -64,7 +64,7 @@ class Timed:
 
 
 def play_matchup(focal, opponents, num_players, games, seed0=1000,
-                 time_limit_s=1.0, record_dir=None):
+                 time_limit_s=TIME_LIMIT_S, record_dir=None):
     """Seat-rotated games of ``focal`` against ``opponents`` (label, factory).
 
     Returns a stats dict for the focal agent: wins/losses/ties, win%, mean VP
@@ -87,7 +87,10 @@ def play_matchup(focal, opponents, num_players, games, seed0=1000,
             seats.append(Timed(factory()))
             labels.append(label)
             specs.append(label)
-        r = play_game(seats, seed=seed0 + g, time_limit_s=time_limit_s)
+        # Timed wraps each agent, so the per-seat budgets (a bundled baseline
+        # keeps its own) are worked out on the agents inside.
+        limits = seat_time_limits([s.agent for s in seats], time_limit_s)
+        r = play_game(seats, seed=seed0 + g, time_limit_s=limits)
 
         to += r["timeouts"][f_seat]
         opp_to += sum(r["timeouts"][s] for s in range(num_players) if s != f_seat)
@@ -127,8 +130,9 @@ def main() -> None:
     ap.add_argument("--players", type=int, default=2, choices=(2, 3), help="track: 2 or 3")
     ap.add_argument("--games", type=int, default=10, help="games per opponent")
     ap.add_argument("--seed", type=int, default=1000)
-    ap.add_argument("--time-limit", type=float, default=1.0,
-                    help="seconds per move, for every seat (default 1.0; the CNU course uses 0.1)")
+    ap.add_argument("--time-limit", type=float, default=TIME_LIMIT_S,
+                    help=f"seconds per decision for your agent (default {TIME_LIMIT_S:g}, "
+                         "the competition rule; bundled baselines keep their own budget)")
     ap.add_argument("--record", action="store_true", help="save game records for replay")
     ap.add_argument("--record-dir", default=os.path.join("results", "games"))
     args = ap.parse_args()
@@ -185,8 +189,8 @@ def main() -> None:
               f"raising moves, {totals['tampered']} tampering breaches were replaced by "
               f"random moves - each one costs you in the real tournament.")
     for name, count in slow_opponents:
-        print(f"\nnote: {name} ran past {args.time_limit:g} s on {count} moves; those moves "
-              f"were played at random, so it played weaker than it does with more time.")
+        print(f"\nnote: {name} ran out of time on {count} moves; those moves were played "
+              f"at random, so it played weaker than usual.")
     if records:
         print(f"\n{len(records)} game records saved under {args.record_dir}/ - replay one with\n"
               f"    python tools/replay_game.py {records[-1]} --moves")

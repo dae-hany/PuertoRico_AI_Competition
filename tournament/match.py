@@ -4,10 +4,14 @@ tournament/match.py — play a single game between Agent instances.
 The number of seats is simply ``len(agents)``: pass 2 agents for a 1-vs-1 (2p
 track) game or 3 for a 3p-track game; the engine sets up the matching variant.
 
-Each move is given a wall-clock budget (``time_limit_s``, default 1 s). If an
+Each decision is given a wall-clock budget (``time_limit_s``, default
+``TIME_LIMIT_S`` = 0.1 s, the rule for every entrant in both tracks). If an
 agent overruns the budget, raises an exception, or returns an illegal action,
 the harness substitutes a uniformly random legal action and records the event.
-See ``docs/COMPETITION_RULES.md`` for the exact rules.
+The bundled baselines are reference opponents whose strength is fixed by a
+node or simulation budget; they get their own budget (``BASELINE_TIME_LIMIT_S``
+= 1 s, what they were designed for). See ``docs/COMPETITION_RULES.md`` for the
+exact rules.
 
 The function returns a per-game record (finishing ranks, winners, scores, and
 rule-violation counts) that the rankers in ``tournament/rankers`` consume.
@@ -27,6 +31,9 @@ import numpy as np
 from puerto_rico import ForwardModel, flatten_observation, make_env
 
 PASS_ACTION = 15
+
+TIME_LIMIT_S = 0.1           # per decision, for every entrant, both tracks
+BASELINE_TIME_LIMIT_S = 1.0  # the bundled baselines' own budget (see the docstring)
 
 
 def _state_fingerprint(env, obs, mask):
@@ -77,8 +84,29 @@ def _finishing_ranks(vp, tiebreak):
 MAX_STEPS = 4000            # ~8x the longest game observed between baselines
 
 
-def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
-              check_tampering: bool = True, max_steps: int = MAX_STEPS) -> dict:
+def seat_time_limits(agents, time_limit_s=TIME_LIMIT_S,
+                     baseline_time_limit_s=BASELINE_TIME_LIMIT_S):
+    """The per-seat budgets: ``time_limit_s`` for entrants, and for the bundled
+    baselines the larger of ``baseline_time_limit_s`` and ``time_limit_s`` (so
+    a generous limit, as in a measurement run, is never cut for them).
+    ``baseline_time_limit_s=None`` holds the baselines to ``time_limit_s`` too.
+    A sequence for ``time_limit_s`` sets every seat explicitly."""
+    if not isinstance(time_limit_s, (int, float)):
+        limits = [float(t) for t in time_limit_s]
+        if len(limits) != len(agents):
+            raise ValueError(f"{len(limits)} time limits for {len(agents)} seats")
+        return limits
+    if baseline_time_limit_s is None:
+        return [float(time_limit_s)] * len(agents)
+    from agents.registry import is_bundled_baseline
+    entrant = float(time_limit_s)
+    baseline = max(float(baseline_time_limit_s), entrant)
+    return [baseline if is_bundled_baseline(a) else entrant for a in agents]
+
+
+def play_game(agents, seed: int = None, time_limit_s=TIME_LIMIT_S,
+              check_tampering: bool = True, max_steps: int = MAX_STEPS,
+              baseline_time_limit_s=BASELINE_TIME_LIMIT_S) -> dict:
     """Play one game between ``agents`` (a list of :class:`Agent` instances).
 
     The seat count is ``len(agents)`` — 2 for the 1-vs-1 track, 3 for the 3p
@@ -87,7 +115,9 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
     Args:
         agents: the seated players, in seat order (index = player id).
         seed: game seed; the same seed reproduces the same initial setup.
-        time_limit_s: per-move wall-clock budget; overruns play a random legal move.
+        time_limit_s: per-decision wall-clock budget for the entrants (default
+            0.1 s); overruns play a random legal move. A sequence gives each
+            seat its own budget.
         check_tampering: verify after every move that the agent left the real
             game untouched, and count the breaches in ``tampered``. Cheap (one
             extra observation per move); turn it off only for profiling.
@@ -98,6 +128,9 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
             the game runs for ever. That is a legal, if useless, way to play, so
             the harness bounds it rather than trusting the field: on reaching
             the cap the game is scored where it stands and flagged ``truncated``.
+        baseline_time_limit_s: the budget of a seat that holds a bundled
+            baseline (default 1 s, or ``time_limit_s`` if that is larger);
+            ``None`` holds baselines to ``time_limit_s``.
 
     Returns:
         dict with ``scores``, ``tiebreak``, ``ranks`` (0 = best), ``winners``,
@@ -107,6 +140,7 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
         (see :mod:`puerto_rico.records`).
     """
     n = len(agents)
+    limits = seat_time_limits(agents, time_limit_s, baseline_time_limit_s)
     env = make_env(seed=seed, num_players=n)
     for agent in agents:
         try:
@@ -153,7 +187,7 @@ def play_game(agents, seed: int = None, time_limit_s: float = 1.0,
             if after != before:
                 tampered[p] += 1
 
-        if elapsed > time_limit_s:
+        if elapsed > limits[p]:
             action = _random_legal(mask, rng)   # overran the budget -> random legal
             timeouts[p] += 1
         elif not (0 <= action < 200) or mask[action] < 0.5:

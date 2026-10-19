@@ -19,7 +19,7 @@ defaults to 3 to keep the historical 3-player behaviour.
 """
 import itertools
 
-from tournament.match import play_game
+from tournament.match import TIME_LIMIT_S, play_game
 from tournament.rankers.alpha_rank import rank_alpha
 from tournament.rankers.elo import rank_elo
 from tournament.rankers.trueskill_ranker import rank_trueskill
@@ -29,7 +29,7 @@ N_SEATS = 3          # default seats per game (3p track); the 2p track uses 2
 
 
 def run_round_robin(pool, games_per_seating: int = 1, seed: int = 0,
-                    allow_repeats: bool = True, time_limit_s: float = 1.0,
+                    allow_repeats: bool = True, time_limit_s: float = TIME_LIMIT_S,
                     verbose: bool = False, n_seats: int = N_SEATS):
     """Play every group of ``n_seats`` agents over all distinct seatings.
 
@@ -65,7 +65,7 @@ def run_round_robin(pool, games_per_seating: int = 1, seed: int = 0,
 
 
 def estimate_payoff_matrix(pool, games_per_pair: int = 4, seed: int = 10_000,
-                           time_limit_s: float = 1.0, n_seats: int = N_SEATS):
+                           time_limit_s: float = TIME_LIMIT_S, n_seats: int = N_SEATS):
     """Estimate ``M[s][r]`` = win rate of focal ``s`` against a field of ``r``.
 
     For each ordered pair (s, r) we play a game whose seat 0 is the focal
@@ -99,7 +99,7 @@ def estimate_payoff_matrix(pool, games_per_pair: int = 4, seed: int = 10_000,
 def run_tournament(pool, games_per_seating: int = 1, seed: int = 0,
                    compute_alpha_rank: bool = False, alpha: float = 1.0,
                    alpha_m: int = 50, alpha_games_per_pair: int = 4,
-                   time_limit_s: float = 1.0, verbose: bool = False,
+                   time_limit_s: float = TIME_LIMIT_S, verbose: bool = False,
                    n_seats: int = N_SEATS):
     """Run the full tournament for one track and compute its rankings.
 

@@ -11,14 +11,32 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-19 — 0.1 s per decision for every entrant, both tracks
+
+The public competition now uses the course's limit: **0.1 s per decision**
+(was 1 s), in the 2p and the 3p track.
+
+* `tournament.match.TIME_LIMIT_S = 0.1` is the default of `play_game`, the
+  runner, the sandbox, `play.py`, `validate_submission.py`, `run_ladder.py`,
+  `course_ladder.py`, `bench2p.py` and the web UI.
+* **The bundled baselines keep 1 s** (`BASELINE_TIME_LIMIT_S`). Their strength
+  is fixed by node and simulation budgets, and `Search` (1500 nodes) and `MCTS`
+  need more than 0.1 s per move, so holding them to 0.1 s would replace many of
+  their moves with random ones and change what they measure. The harness
+  recognises a baseline by its exact class (`agents.registry.is_bundled_baseline`);
+  a subclass, a copy, or a sandboxed entry gets 0.1 s. `play_game` also takes a
+  per-seat list of limits, and `baseline_time_limit_s=None` holds everyone to
+  the same limit.
+* Baseline numbers in docs/BASELINES.md are unchanged (they were measured with a
+  generous limit, and the baselines' budget did not change).
+
 ## 2026-10-19 — CNU course edition: 0.1 s, fixed seeds, wins and rank
 
 No engine or rule changes. The course edition's run settings and boards
 (docs/COURSE_CNU_2026.md):
 
-* **0.1 s per decision** in the course (the public competition keeps 1 s).
-  `tools/course_ladder.py` now defaults to 0.1 s; `play.py` and
-  `validate_submission.py` keep the 1 s default and take `--time-limit 0.1`.
+* **0.1 s per decision** in the course; `tools/course_ladder.py` defaults to it.
+  (The public competition adopted the same limit the same day, see above.)
 * **Fixed seed list, both seatings.** `course_ladder.py` plays every seed of
   `--seeds` (default `1-25`) and `--seeds-file` once in each seating: a ladder
   round is 25 seeds × 2 = 50 games per pair; the final run adds 475 private

@@ -3,7 +3,6 @@
     python tools/validate_submission.py my_agent.py:MyAgent
     python tools/validate_submission.py my_agent.py                # one Agent class in the file
     python tools/validate_submission.py my_agent.py:MyAgent --track 2p --games 4
-    python tools/validate_submission.py my_agent.py:MyAgent --track 2p --time-limit 0.1   # CNU course
 
 What it checks:
 
@@ -11,9 +10,9 @@ What it checks:
   2. the imports are limited to the standard library, NumPy, PyTorch, and this
      repo (docs/COMPETITION_RULES.md), with no network / process / file access;
   3. for each track, the agent plays real games **inside the official sandbox**
-     (tournament/sandbox.py): its own process, the per-move deadline
-     (--time-limit: 1 s by default, 0.1 s in the CNU course) enforced by
-     killing the process, no access to the live game. The report shows
+     (tournament/sandbox.py): its own process, the 0.1 s per-decision
+     deadline (--time-limit) enforced by killing the process, no access to
+     the live game. The report shows
      timeouts, illegal moves / exceptions, forfeits, and the per-move
      round-trip time (which includes ~2 ms of sandbox overhead).
 
@@ -32,6 +31,8 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+from tournament.match import TIME_LIMIT_S  # noqa: E402
 
 REPO_PACKAGES = {"puerto_rico", "agents", "tournament", "training"}
 ALLOWED_THIRD_PARTY = {"numpy", "torch"}
@@ -265,8 +266,8 @@ def main() -> None:
     ap.add_argument("--track", choices=("2p", "3p", "both"), default="both")
     ap.add_argument("--games", type=int, default=2, help="sandboxed games per track")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--time-limit", type=float, default=1.0,
-                    help="seconds per move (default 1.0; the CNU course uses 0.1)")
+    ap.add_argument("--time-limit", type=float, default=TIME_LIMIT_S,
+                    help=f"seconds per decision (default {TIME_LIMIT_S:g}, the competition rule)")
     args = ap.parse_args()
 
     spec = absolute_spec(resolve_spec(args.spec))

@@ -10,8 +10,8 @@ What it gives you:
     "module:Class" / "path/to/file.py:Class");
   * watch bots play each other (set every seat to a bot), or play a seat yourself;
   * competition-rule mirroring while debugging: each agent move is timed, and a
-    move that exceeds the 1 s budget, returns an illegal action, or raises is
-    replaced by a random legal move — exactly as the real tournament does — and
+    move that exceeds the 0.1 s budget (1 s for a bundled baseline), returns an
+    illegal action, or raises is replaced by a random legal move — exactly as the real tournament does — and
     the substitution is shown in the log so you can see what would happen.
 
 This is a local single-game debug tool (global state, no auth). It is not the
@@ -39,6 +39,8 @@ from agents.base import Agent
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent,
                     RandomAgent, ShippingRushAgent, TradeBuildingAgent)
 from agents.search_agent import SearchAgent, SearchLiteAgent
+from agents.registry import is_bundled_baseline
+from tournament.match import BASELINE_TIME_LIMIT_S, TIME_LIMIT_S
 from tournament.sandbox import load_agent_class
 try:                                      # PPO is optional (needs torch)
     from agents import PpoAgent
@@ -48,7 +50,8 @@ except Exception:
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 app = Flask(__name__, static_folder="static", static_url_path="")
 
-MOVE_TIME_LIMIT = 1.0          # seconds per move (competition rule)
+MOVE_TIME_LIMIT = TIME_LIMIT_S              # 0.1 s per decision (competition rule)
+BASELINE_MOVE_TIME_LIMIT = BASELINE_TIME_LIMIT_S   # the bundled baselines' own budget
 SUBMISSIONS_DIR = os.path.join(ROOT, "submissions")
 PPO_CHECKPOINT = os.path.join(ROOT, "training", "checkpoints", "ppo_baseline.pt")
 GAME_RECORDS_DIR = os.path.join(ROOT, "results", "webui_games")
@@ -386,8 +389,9 @@ def ai_step():
         note, substituted = f"raised {type(e).__name__}: {e}", True
     elapsed = time.perf_counter() - t0
 
-    if not substituted and elapsed > MOVE_TIME_LIMIT:
-        note, substituted = f"timeout {elapsed:.2f}s > {MOVE_TIME_LIMIT:.0f}s", True
+    limit = BASELINE_MOVE_TIME_LIMIT if is_bundled_baseline(agent) else MOVE_TIME_LIMIT
+    if not substituted and elapsed > limit:
+        note, substituted = f"timeout {elapsed:.2f}s > {limit:g}s", True
     elif not substituted and (intended < 0 or intended >= 200 or mask[intended] < 0.5):
         note, substituted = f"illegal action {intended}", True
 
