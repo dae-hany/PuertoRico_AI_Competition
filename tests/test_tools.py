@@ -45,6 +45,17 @@ def test_validate_passes_the_example_agent():
     assert "Result: READY" in r.stdout
 
 
+def test_validate_ends_with_the_verdict_and_runs_from_any_directory(tmp_path):
+    """The course guide says the last line reads Result: READY, with --time-limit 0.1."""
+    shutil.copy(os.path.join(ROOT, "submissions", "example_agent.py"), tmp_path / "my_agent.py")
+    env = dict(os.environ, PYTHONPATH=ROOT)
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "validate_submission.py"),
+                        "my_agent.py", "--track", "2p", "--games", "1", "--time-limit", "0.1"],
+                       cwd=tmp_path, capture_output=True, text=True, timeout=600, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.strip().splitlines()[-1].startswith("Result: READY"), r.stdout
+
+
 def test_validate_fails_bad_submissions(tmp_path):
     raising = tmp_path / "raising_agent.py"
     raising.write_text(

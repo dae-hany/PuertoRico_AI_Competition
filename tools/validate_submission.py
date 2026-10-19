@@ -3,6 +3,7 @@
     python tools/validate_submission.py my_agent.py:MyAgent
     python tools/validate_submission.py my_agent.py                # one Agent class in the file
     python tools/validate_submission.py my_agent.py:MyAgent --track 2p --games 4
+    python tools/validate_submission.py my_agent.py:MyAgent --track 2p --time-limit 0.1   # CNU course
 
 What it checks:
 
@@ -10,7 +11,8 @@ What it checks:
   2. the imports are limited to the standard library, NumPy, PyTorch, and this
      repo (docs/COMPETITION_RULES.md), with no network / process / file access;
   3. for each track, the agent plays real games **inside the official sandbox**
-     (tournament/sandbox.py): its own process, the 1 s/move deadline enforced by
+     (tournament/sandbox.py): its own process, the per-move deadline
+     (--time-limit: 1 s by default, 0.1 s in the CNU course) enforced by
      killing the process, no access to the live game. The report shows
      timeouts, illegal moves / exceptions, forfeits, and the per-move
      round-trip time (which includes ~2 ms of sandbox overhead).
@@ -91,6 +93,18 @@ def resolve_spec(arg):
     sys.exit(f"{arg!r}: expected path/to/file.py:ClassName or module:ClassName")
 
 
+def absolute_spec(spec):
+    """Make a relative ``file.py`` path absolute.
+
+    The sandboxed games start their process in the repository root, so a path
+    that is relative to the caller's directory would not be found there.
+    """
+    path, sep, cls = spec.rpartition(":")
+    if sep and path.endswith(".py") and os.path.exists(path):
+        return f"{os.path.abspath(path)}:{cls}"
+    return spec
+
+
 def check_loads(spec, report):
     from tournament.sandbox import load_agent_class
     try:
@@ -156,7 +170,8 @@ def check_source(cls, spec, report):
     if io_calls:
         report.add("WARN", "file access", f"calls to {', '.join(sorted(io_calls))} found - "
                    "the official run forbids disk I/O; if you load model weights, "
-                   "check with the organizer how to ship them")
+                   "check with the organizer how to ship them (the CNU course allows "
+                   "one weight file, so this WARN is expected there)")
 
 
 # -- 3. play inside the official sandbox --------------------------------------
@@ -250,10 +265,11 @@ def main() -> None:
     ap.add_argument("--track", choices=("2p", "3p", "both"), default="both")
     ap.add_argument("--games", type=int, default=2, help="sandboxed games per track")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--time-limit", type=float, default=1.0)
+    ap.add_argument("--time-limit", type=float, default=1.0,
+                    help="seconds per move (default 1.0; the CNU course uses 0.1)")
     args = ap.parse_args()
 
-    spec = resolve_spec(args.spec)
+    spec = absolute_spec(resolve_spec(args.spec))
     print(f"Validating {spec}\n")
     report = Report()
     cls = check_loads(spec, report)
@@ -264,10 +280,11 @@ def main() -> None:
             check_track(spec, cls, n, args.games, args.seed, args.time_limit, report)
 
     verdict = "READY" if report.failures == 0 else "NOT READY"
-    print(f"\nResult: {verdict} ({report.failures} failures, {report.warnings} warnings)")
     if report.failures == 0:
-        print("Submit the single .py file per track you are entering; "
-              "see docs/SUBMISSION_GUIDE.md section 7.")
+        print("\nWhat to submit: docs/SUBMISSION_GUIDE.md section 7 (public competition)"
+              " or docs/COURSE_CNU_2026.md (CNU course).")
+    # The verdict stays the last line: the guides tell entrants to read it there.
+    print(f"\nResult: {verdict} ({report.failures} failures, {report.warnings} warnings)")
     sys.exit(0 if report.failures == 0 else 1)
 
 

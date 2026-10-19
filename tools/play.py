@@ -4,6 +4,7 @@
     python tools/play.py --agent my_agent.py:MyAgent --vs Search --games 20
     python tools/play.py --agent my_agent.py:MyAgent --players 3 --vs ShippingRush,ActionValue
     python tools/play.py --agent my_agent.py:MyAgent --vs all --record
+    python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1 --record   # CNU course
 
 --agent   your agent as  path/to/file.py:ClassName  (or module:ClassName),
           or the name of a bundled baseline (Random, Factory, ShippingRush,
@@ -16,10 +17,13 @@
 --record  save every game under results/games/ so you can replay one with
           python tools/replay_game.py <file> --moves
 
-Games are played in-process under the competition rules (1 s per move,
-illegal moves and exceptions replaced by a random legal move). The per-move
-times printed are your agent's real wall-clock cost, so you can see how close
-to the budget you are before you submit. For the official sandbox (your agent
+Games are played in-process under the competition rules (--time-limit per
+move: 1 s by default, 0.1 s in the CNU course; a late move, an illegal move or
+an exception is replaced by a random legal move). The limit applies to every
+seat, so an opponent that needs more time (Search, MCTS at 0.1 s) plays some
+moves at random; the run then prints a note. The per-move times printed are
+your agent's real wall-clock cost, so you can see how close to the budget you
+are before you submit. For the official sandbox (your agent
 in its own process, killed at the deadline) run tools/validate_submission.py.
 """
 from __future__ import annotations
@@ -70,6 +74,7 @@ def play_matchup(focal, opponents, num_players, games, seed0=1000,
     f_label, f_factory = focal
     wins = losses = ties = 0
     margins, times, to, il, tp, saved = [], [], 0, 0, 0, []
+    opp_to = 0
     for g in range(games):
         f_seat = g % num_players
         seats, labels, specs = [], [], []
@@ -85,6 +90,7 @@ def play_matchup(focal, opponents, num_players, games, seed0=1000,
         r = play_game(seats, seed=seed0 + g, time_limit_s=time_limit_s)
 
         to += r["timeouts"][f_seat]
+        opp_to += sum(r["timeouts"][s] for s in range(num_players) if s != f_seat)
         il += r["illegal"][f_seat]
         tp += r["tampered"][f_seat]
         times.extend(seats[f_seat].times)
@@ -109,6 +115,7 @@ def play_matchup(focal, opponents, num_players, games, seed0=1000,
         "t_mean_ms": 1000 * t.mean(), "t_p95_ms": 1000 * np.percentile(t, 95),
         "t_max_ms": 1000 * t.max(),
         "timeouts": to, "illegal": il, "tampered": tp, "records": saved,
+        "opp_timeouts": opp_to,
     }
 
 
@@ -120,7 +127,8 @@ def main() -> None:
     ap.add_argument("--players", type=int, default=2, choices=(2, 3), help="track: 2 or 3")
     ap.add_argument("--games", type=int, default=10, help="games per opponent")
     ap.add_argument("--seed", type=int, default=1000)
-    ap.add_argument("--time-limit", type=float, default=1.0, help="seconds per move")
+    ap.add_argument("--time-limit", type=float, default=1.0,
+                    help="seconds per move, for every seat (default 1.0; the CNU course uses 0.1)")
     ap.add_argument("--record", action="store_true", help="save game records for replay")
     ap.add_argument("--record-dir", default=os.path.join("results", "games"))
     args = ap.parse_args()
@@ -149,6 +157,7 @@ def main() -> None:
     totals = {"wins": 0, "losses": 0, "ties": 0, "games": 0, "timeouts": 0,
               "illegal": 0, "tampered": 0}
     records = []
+    slow_opponents = []
     record_dir = args.record_dir if args.record else None
     for i, opp in enumerate(opponents):
         if n == 2:
@@ -165,6 +174,8 @@ def main() -> None:
             totals[k] += d[k]
         totals["games"] += args.games
         records.extend(d["records"])
+        if d["opp_timeouts"]:
+            slow_opponents.append((name, d["opp_timeouts"]))
 
     g = max(1, totals["games"])
     print(f"{'overall':<18}{100 * (totals['wins'] + 0.5 * totals['ties']) / g:>5.0f}%"
@@ -173,6 +184,9 @@ def main() -> None:
         print(f"\nWARNING: {totals['timeouts']} timeouts, {totals['illegal']} illegal/"
               f"raising moves, {totals['tampered']} tampering breaches were replaced by "
               f"random moves - each one costs you in the real tournament.")
+    for name, count in slow_opponents:
+        print(f"\nnote: {name} ran past {args.time_limit:g} s on {count} moves; those moves "
+              f"were played at random, so it played weaker than it does with more time.")
     if records:
         print(f"\n{len(records)} game records saved under {args.record_dir}/ - replay one with\n"
               f"    python tools/replay_game.py {records[-1]} --moves")

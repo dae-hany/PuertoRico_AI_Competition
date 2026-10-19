@@ -19,14 +19,15 @@ choosing **roles**, then producing and shipping **goods** and constructing
 2. The **printed VP value** of buildings you own.
 3. The **end‑game bonuses** of the five large buildings (see below).
 
-The highest total VP wins. Ties are broken by **leftover doubloons + goods**.
+The highest total VP wins. Ties are broken by **leftover doubloons + goods**; if
+that is tied too, the tied players share the win.
 
 ## Roles and the round structure
 
 Each round, players take turns choosing a role that **nobody else has taken yet**
 that round. When a role is chosen, **every** player performs that role's action in
 turn order — but the player who *chose* it gets a small **privilege** (an extra
-good, a discount, or shipping priority). Any role left unpicked at the end of a
+good, a discount, a bonus VP). Any role left unpicked at the end of a
 round gains **one doubloon**, making it more attractive next round.
 
 How many roles are on the table and picked each round depends on the track:
@@ -69,9 +70,10 @@ staffed plantation of that crop — both occupied by colonists.
 ## Buildings
 
 There are **23 building types** (engine `BuildingType` 0–22). A player's city has
-**12 building spaces**. A building only grants its ability/VP while it is
-**staffed** (at least one colonist on it). Cost is in doubloons; *Cap* is how many
-colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
+**12 building spaces**. A building's **printed VP counts whether or not it is
+staffed**; its **ability** (and a large building's end‑game bonus) only works
+while it is **staffed** (at least one colonist on it). Cost is in doubloons; *Cap*
+is how many colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
 
 **Production buildings** (turn staffed plantations into goods during Craftsman):
 
@@ -147,7 +149,8 @@ The current round finishes and the game ends when **any** of these occurs:
 - the **colonist supply** cannot refill the colonist ship, or
 - any player fills **all 12** of their city building spaces.
 
-Highest total VP wins; ties broken by leftover doubloons + goods.
+Highest total VP wins; ties broken by leftover doubloons + goods (still tied:
+the tied players share the win).
 
 ## Setup by player count
 

@@ -35,7 +35,8 @@ Your entry is a single Python class that implements `act`.
 
 ## Rules in one line
 
-2 players (2p track) or 3 (3p track), **1 second per move** (wall-clock), you
+2 players (2p track) or 3 (3p track), **1 second per move** (wall-clock; **0.1 s**
+in the CNU course, see [`../docs/COURSE_CNU_2026.md`](../docs/COURSE_CNU_2026.md)), you
 must return a legal action. Going over the time limit or returning an illegal
 action forfeits that move to a random legal one. Full details:
 [`../docs/COMPETITION_RULES.md`](../docs/COMPETITION_RULES.md).

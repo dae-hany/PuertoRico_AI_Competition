@@ -4,9 +4,10 @@ Build an agent that plays Puerto Rico, test it against the baselines, and submit
 it. You only need to write one method: `act`.
 
 > Taking the Chonnam National University **Reinforcement Learning** course? The
-> 2p track is your final project, and it adds a few rules to this guide (what
-> goes in the zip, the weight file, win-rate ranking, the ladder rounds):
-> [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
+> 2p track is your final project, and it changes a few rules in this guide
+> (0.1 s per decision, the code zip and the separate report zip, the weight
+> file, ranking by wins and rank, the four ladder rounds, submission through
+> the LMS): [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
 
 The competition has **two tracks** — **2p** (1‑vs‑1) and **3p** (3‑player) — and
 each is a **separate submission**. You can enter one or both, with a different
@@ -66,7 +67,8 @@ class MyAgent(Agent):
         return int(legal[0])
 ```
 
-The starter returns a random legal move — replace it with real logic.
+The starter returns the first legal move (not a random one) — replace it with
+real logic.
 
 ## 4. Test against the baselines
 
@@ -126,8 +128,8 @@ leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 
 ## 6. Rules you must respect
 
-2 players (2p track) or 3 (3p track), **1 second per move**, always return a
-legal action. Going over the limit, returning an illegal action, or raising an
+2 players (2p track) or 3 (3p track), **1 second per move** (**0.1 s** in the CNU
+course), always return a legal action. Going over the limit, returning an illegal action, or raising an
 exception forfeits that move to a random legal one. Full rules:
 [COMPETITION_RULES.md](COMPETITION_RULES.md).
 
@@ -139,6 +141,7 @@ exactly as the tournament will:
 
 ```bash
 python tools/validate_submission.py my_agent.py:MyAgent
+python tools/validate_submission.py my_agent.py:MyAgent --track 2p --time-limit 0.1   # CNU course
 ```
 
 It prints a PASS / WARN / FAIL checklist and ends with `Result: READY` (exit
@@ -154,6 +157,8 @@ both observation lengths). Make sure it:
 - states which track(s) it is for.
 
 Where and when to submit is announced in the README's *The competition*
-section. During the competition window the organizer runs a weekly ladder over
+section. (CNU course students submit a zip through the LMS instead, and the
+course publishes only wins and rank, not replays: see
+[COURSE_CNU_2026.md](COURSE_CNU_2026.md).) During the competition window the organizer runs a weekly ladder over
 every entry received so far and publishes the standings and replays under
 `leaderboard/`, so submit early and resubmit whenever you improve.
