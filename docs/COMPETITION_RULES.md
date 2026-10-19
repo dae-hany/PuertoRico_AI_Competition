@@ -6,10 +6,11 @@ the time limit, legality, and how the official run is executed.
 They are also the technical rules of the **course edition** currently running —
 the 2p track as the final project of the Reinforcement Learning course at
 Chonnam National University. That edition changes a few things on top (it is 2p
-only, ranks by win rate rather than Elo, allows one weight file, and asks for a
-write-up alongside the agent): see **[COURSE_CNU_2026.md](COURSE_CNU_2026.md)**,
-which takes precedence for students of that course. Everything not listed there
-is governed by this page.
+only, allows **0.1 s per decision** instead of 1 s, ranks by wins and rank in
+games between students rather than by Elo, allows one weight file, and takes a
+code zip and a separate report and presentation zip): see
+**[COURSE_CNU_2026.md](COURSE_CNU_2026.md)**, which takes precedence for
+students of that course. Everything not listed there is governed by this page.
 
 ## Tracks
 
@@ -61,7 +62,8 @@ class MyAgent(Agent):
 
 ## Per-move time limit
 
-- You have **1 second of wall-clock time per move**.
+- You have **1 second of wall-clock time per move**. (The CNU course edition
+  allows **0.1 s**; see [COURSE_CNU_2026.md](COURSE_CNU_2026.md).)
 - If a move exceeds 1 s, the harness **discards your move**, plays a **uniformly
   random legal action** instead, and records a **timeout**.
 - In the official run this is **enforced, not just measured**: your agent runs in

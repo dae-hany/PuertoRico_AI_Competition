@@ -159,8 +159,9 @@ examples/           first_agent.ipynb (Colab), play_one_game.py, run_tournament.
 tools/              play.py (your agent vs the baselines), validate_submission.py
                     (the official sandbox check), replay_game.py, run_ladder.py
                     (organizer: one ladder round), course_ladder.py (organizer:
-                    a course cohort — zip intake, parallel games, win-rate
-                    board), bench2p.py, bench_engine.py, measure_baselines.py
+                    a course cohort — zip intake, fixed seed list, parallel
+                    games, wins-and-rank board), make_private_seeds.py,
+                    bench2p.py, bench_engine.py, measure_baselines.py
 leaderboard/        ladder standings and replays, published during the window
 submission_template/ copy this to build your competition entry
 submissions/        drop an agent here to debug it in the web UI
@@ -176,9 +177,10 @@ tests/              pytest suite
   [docs/COMPETITION_RULES.md](docs/COMPETITION_RULES.md).
 - **Running now: the course edition.** The 2p track is the final project of the
   Reinforcement Learning course at Chonnam National University (autumn 2026).
-  Its extra rules — win-rate ranking, one weight file, the required write-up,
-  and the ladder rounds before the deadline — are in
-  [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
+  Its extra rules — 0.1 s per decision, ranking by wins and rank in games
+  between students, one weight file, a code zip and a separate report and
+  presentation zip, and four ladder rounds that publish only wins and rank — are
+  in [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
   for students of that course.
 - **Window.** The competition runs for about three months. The dates of the
   IEEE CoG 2027 edition will be announced here.

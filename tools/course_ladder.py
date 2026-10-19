@@ -1,18 +1,30 @@
-"""Run one ladder round for a course cohort: validate, play in parallel, publish two boards.
+"""Run one ladder round for a course cohort: validate, play in parallel, publish the boards.
 
 Organizer tool for running the 2p track as a university final project, where
-the grade is a **win rate among the students' own games** rather than the
-competition's Elo board. It differs from ``tools/run_ladder.py`` in four ways:
+the grade uses the **wins and the rank among the students' own games** rather
+than the competition's Elo board (docs/COURSE_CNU_2026.md). It differs from
+``tools/run_ladder.py`` in five ways:
 
 1. every entry is **validated first** (the official sandbox check) and alias
    clashes are reported, so a broken file is caught before the games start;
-2. games are played **in parallel** (one process per concurrent game), because
+2. every pair plays a **fixed list of seeds, each once in either seating**
+   (``--seeds``, ``--seeds-file``), so every entry meets every opponent on the
+   same starts from both sides;
+3. games are played **in parallel** (one process per concurrent game), because
    a cohort round-robin is quadratic and a single process is too slow;
-3. it writes **two boards** -- a student-facing one with wins/losses/win rate
-   only, and an organizer one that adds the roster, Elo, timeouts and
-   violations;
-4. the ranking uses **student-vs-student games only**. Baselines are played as
-   anchors and reported in a separate column.
+4. the published board shows **only the rank and the wins** (a draw is half a
+   win); the organizer board adds the roster, W/L/D, Elo, timeouts and
+   violations, and the replays stay with the organizer;
+5. the ranking uses **student-vs-student games only**. Baselines are played on
+   the same seeds as a reference and reported on a separate board.
+
+Seeds. ``--seeds`` takes ranges and lists (``1-25``, ``1-25,40,90-99``) and
+defaults to the public ladder seeds ``1-25``: 25 seeds x 2 seatings = 50 games
+per pair. ``--seeds-file`` adds the seeds in a file (one or more per line,
+``#`` comments allowed) -- this is how the private seeds of the final run come
+in without ever being typed into this repository; draw them with
+``tools/make_private_seeds.py``. The course's final run is the 25 public seeds
+plus 475 private ones: 500 seeds x 2 seatings = 1000 games per pair.
 
 Submissions are discovered in ``--entries``: either one ``*.py`` per student
 named ``<student id>_<name>.py``, or one folder per student with the same name
@@ -25,20 +37,30 @@ subclass; a weight file may sit beside it (the agent locates it from
         --zips C:/course_2p/zips --zip-only          # unpack + checklist
     python tools/course_ladder.py --entries C:/course_2p/submissions --dry-run
     python tools/course_ladder.py --entries C:/course_2p/submissions \
-        --out C:/course_2p/out --games-per-pair 4 --workers 8
+        --out C:/course_2p/out --workers 8           # a ladder round: seeds 1-25
+    python tools/course_ladder.py --entries C:/course_2p/final \
+        --out C:/course_2p/out --label final --seeds 1-25 \
+        --seeds-file C:/course_2p/private_seeds.txt --workers 8
+
+The time limit defaults to the course's **0.1 s per decision**. The code zips
+and the report zips are both named ``<student id>_<name>.zip``; keep them in
+separate folders and give ``--zips`` the code zips only.
 
 Writes, per run:
 
-    <out>/<date>/board_students.md    publish this (aliases only)
-    <out>/<date>/board_students.csv
-    <out>/<date>/board_organizer.csv  keep this (roster, Elo, timeouts)
-    <out>/<date>/validation.txt       per-entry PASS / WARN / FAIL
-    <out>/<date>/intake.csv           what each zip contained (with --zips)
-    <out>/<date>/summary.json
-    <out>/<date>/games/*.json         every replay, for tools/replay_game.py
+    <out>/<date>/board_students.md    publish this: rank and wins, aliases only
+    <out>/<date>/board_students.csv   the same as a table
+    <out>/<date>/board_baselines.md   publish this too: results against the
+                                      baselines, for reference only
+    <out>/<date>/board_organizer.csv  keep this (roster, W/L/D, Elo, timeouts)
+    <out>/<date>/validation.txt       keep: per-entry PASS / WARN / FAIL
+    <out>/<date>/intake.csv           keep: what each zip contained (with --zips)
+    <out>/<date>/summary.json         keep
+    <out>/<date>/games/*.json         keep: every replay, for tools/replay_game.py;
+                                      the course does not publish replays
 
-Student code never belongs in this repository: point ``--entries`` and
-``--out`` at a working directory outside it.
+Student code and the private seeds never belong in this repository: point
+``--entries``, ``--out`` and ``--seeds-file`` at a working directory outside it.
 """
 from __future__ import annotations
 
@@ -46,6 +68,7 @@ import argparse
 import ast
 import csv
 import datetime as dt
+import hashlib
 import itertools
 import json
 import os
@@ -68,6 +91,8 @@ from tournament.rankers.win_rate import wilson_ci               # noqa: E402
 N_SEATS = 2                                   # this tool is the 1-vs-1 track
 FILENAME_RE = re.compile(r"^(?P<sid>[0-9]{4,12})_(?P<name>.+)$")
 DEFAULT_BASELINES = "random,factory,shippingrush,tradebuilding,actionvalue,searchlite"
+DEFAULT_SEEDS = "1-25"                        # the course's public ladder seeds
+DEFAULT_TIME_LIMIT = 0.1                      # the course's limit per decision
 
 WEIGHT_EXTS = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".bin", ".safetensors",
                ".pkl", ".h5", ".onnx"}
@@ -220,6 +245,54 @@ def discover(entries_dir):
     return entries, problems + clashes, clashes
 
 
+# --------------------------------------------------------------------- seeds
+def parse_seeds(text):
+    """``"1-3, 7 9-10"`` -> ``[1, 2, 3, 7, 9, 10]`` (order kept, repeats dropped).
+
+    Commas and whitespace both separate items; ``a-b`` is an inclusive range.
+    Seeds must be non-negative integers.
+    """
+    seeds = []
+    for item in re.split(r"[,\s]+", text.strip()):
+        if not item:
+            continue
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", item)
+        if not m:
+            raise ValueError(f"not a seed or a range of seeds: {item!r}")
+        lo = int(m.group(1))
+        hi = int(m.group(2)) if m.group(2) is not None else lo
+        if hi < lo:
+            raise ValueError(f"empty range: {item!r}")
+        seeds.extend(range(lo, hi + 1))
+    return unique(seeds)
+
+
+def read_seeds_file(path):
+    """The seeds in ``path``: ``parse_seeds`` syntax, one or more per line, ``#`` comments."""
+    with open(path, encoding="utf-8") as f:
+        text = " ".join(line.split("#", 1)[0] for line in f)
+    return parse_seeds(text)
+
+
+def unique(seq):
+    seen, out = set(), []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def seeds_digest(seeds):
+    """A SHA-256 of the seed list, to identify it without revealing it."""
+    return hashlib.sha256(",".join(map(str, seeds)).encode("ascii")).hexdigest()
+
+
+def inside_repo(path):
+    real = os.path.realpath(path)
+    return os.path.commonpath([real, os.path.realpath(ROOT)]) == os.path.realpath(ROOT)
+
+
 # -------------------------------------------------------------- zip intake
 def safe_members(zf):
     """The members worth extracting, and the ones refused, from ``zf``.
@@ -253,7 +326,8 @@ def intake_zips(zip_dir, entries_dir):
 
     Returns a manifest -- one row per zip, listing the code, weight and
     document files found -- so the organizer can see at a glance who is
-    missing the README or the write-up.
+    missing the agent or the README. (The write-up and the slides come in a
+    separate zip and are not read here.)
     """
     import zipfile
 
@@ -264,7 +338,7 @@ def intake_zips(zip_dir, entries_dir):
         dest = os.path.join(entries_dir, stem)
         os.makedirs(dest, exist_ok=True)
         row = {"zip": fname, "student": stem, "code": [], "weights": [],
-               "docs": [], "other": [], "skipped": []}
+               "docs": [], "other": [], "skipped": [], "readme": False}
         try:
             with zipfile.ZipFile(os.path.join(zip_dir, fname)) as zf:
                 keep, skipped = safe_members(zf)
@@ -279,6 +353,8 @@ def intake_zips(zip_dir, entries_dir):
                               "weights" if ext in WEIGHT_EXTS else
                               "docs" if ext in DOC_EXTS else "other")
                     row[bucket].append(rel)
+                    if os.path.basename(rel).lower().startswith("readme"):
+                        row["readme"] = True
         except zipfile.BadZipFile as e:
             row["skipped"].append(f"unreadable zip: {e}")
         manifest.append(row)
@@ -292,8 +368,8 @@ def print_manifest(manifest):
         missing = []
         if not row["code"]:
             missing.append("AGENT")
-        if not row["docs"]:
-            missing.append("README/write-up")
+        if not row["readme"]:
+            missing.append("README")
         notes = f"{len(row['skipped'])} files skipped" if row["skipped"] else ""
         print(f"  {row['student']:<28} {len(row['code']):>3} {len(row['weights']):>8} "
               f"{len(row['docs']):>5}  {', '.join(missing) if missing else '-':<18} {notes}")
@@ -324,11 +400,12 @@ def validate_entries(entries, games, time_limit_s, workers):
 
 
 # ------------------------------------------------------------------ schedule
-def build_tasks(players, games_per_pair, seed, baseline_vs_baseline):
+def build_tasks(players, seeds, baseline_vs_baseline):
     """One task per unordered pair: ``(a, b, [(seed, swapped), ...])``.
 
-    Seatings alternate so each side plays first in half its games, which is how
-    the seat advantage is balanced out.
+    Every pair plays every seed twice, once in each seating. A seed fixes the
+    game's random setup, so the swap gives both sides the same start, which is
+    how the seat advantage is balanced out.
     """
     tasks = []
     names = [p["alias"] for p in players]
@@ -337,9 +414,7 @@ def build_tasks(players, games_per_pair, seed, baseline_vs_baseline):
         for b in names[i + 1:]:
             if not baseline_vs_baseline and kinds[a] == "baseline" and kinds[b] == "baseline":
                 continue
-            games = []
-            for g in range(games_per_pair):
-                games.append((seed + 1000 * len(tasks) + g, bool(g % 2)))
+            games = [(s, swapped) for s in seeds for swapped in (False, True)]
             tasks.append((a, b, games))
     return tasks
 
@@ -425,8 +500,30 @@ def score(row, prefix=""):
     return w, l, d, n, rate
 
 
+def vs_baselines(records, entries, baselines):
+    """``{alias: {baseline: (wins, games)}}`` -- a draw counts as half a win."""
+    aliases = {e["alias"] for e in entries}
+    out = {a: {b: [0.0, 0] for b in baselines} for a in aliases}
+    for rec in records:
+        seats = rec["agents"]
+        winners = rec["result"]["winners"]
+        for i, name in enumerate(seats):
+            other = seats[1 - i]
+            if name not in aliases or other not in out[name]:
+                continue
+            cell = out[name][other]
+            cell[1] += 1
+            if i in winners:
+                cell[0] += 1.0 / len(winners)
+    return {a: {b: (w, n) for b, (w, n) in row.items()} for a, row in out.items()}
+
+
 def build_boards(records, entries, baselines):
-    """Student board rows (student games only) plus organizer extras."""
+    """Student board rows (student games only) plus organizer extras.
+
+    ``points`` is the published "wins": wins plus half the draws. Entries with
+    the same points share a rank (1, 2, 2, 4, ...).
+    """
     kinds = {e["alias"]: "student" for e in entries}
     kinds.update({b: "baseline" for b in baselines})
     players = list(kinds)
@@ -446,6 +543,7 @@ def build_boards(records, entries, baselines):
         rows.append({
             "alias": e["alias"], "file": e["file"], "student_id": e["student_id"],
             "student_name": e["student_name"], "wins": w, "losses": l, "draws": d,
+            "points": w + 0.5 * d,
             "games": n, "win_rate": rate, "ci_low": lo, "ci_high": hi,
             "baseline_wins": bw, "baseline_losses": bl, "baseline_draws": bd,
             "baseline_games": bn, "baseline_win_rate": brate,
@@ -453,25 +551,44 @@ def build_boards(records, entries, baselines):
             "illegal": row["illegal"], "tampered": row["tampered"],
             "mean_game_s": round(row["elapsed"] / row["games"], 1) if row["games"] else 0.0,
         })
-    rows.sort(key=lambda r: (-r["win_rate"], -r["wins"], r["alias"]))
-    for i, r in enumerate(rows, 1):
-        r["rank"] = i
+    rows.sort(key=lambda r: (-r["points"], r["alias"]))
+    for i, r in enumerate(rows):
+        r["rank"] = (rows[i - 1]["rank"] if i and r["points"] == rows[i - 1]["points"]
+                     else i + 1)
     return rows
 
 
+def fmt_wins(x):
+    return f"{x:g}"
+
+
 def students_markdown(rows, meta):
-    head = (f"# {meta['date']} ladder -- 2p track\n\n"
-            f"{meta['entries']} entries, {meta['games']} games "
-            f"({meta['games_per_pair']} per pair), {meta['time_limit']:g} s/move. "
-            "Ranked by win rate over games between entries; ties count as half a win. "
-            "The baseline column is a reference and does not affect the rank. "
-            f"Replays: `{meta['date']}/games/`.\n\n")
-    lines = ["| Rank | Agent | W | L | D | Win% | Games | vs baselines |",
-             "|-----:|-------|--:|--:|--:|-----:|------:|-------------:|"]
+    """The published board: rank and wins only, keyed by alias."""
+    head = (f"# {meta['label']} -- {meta['date']} -- 2p track\n\n"
+            f"{meta['entries']} entries. Every pair played {meta['seeds']} seeds x 2 "
+            f"seatings = {meta['games_per_pair']} games, {meta['time_limit']:g} s per "
+            "decision. Only games between entries count; a draw counts as half a win. "
+            "Results against the baselines are a separate reference "
+            "(`board_baselines.md`).\n\n")
+    lines = ["| Rank | Agent | Wins |",
+             "|-----:|-------|-----:|"]
     for r in rows:
-        base = (f"{r['baseline_win_rate'] * 100:.1f}%" if r["baseline_games"] else "-")
-        lines.append(f"| {r['rank']} | {r['alias']} | {r['wins']} | {r['losses']} | "
-                     f"{r['draws']} | {r['win_rate'] * 100:.1f}% | {r['games']} | {base} |")
+        lines.append(f"| {r['rank']} | {r['alias']} | {fmt_wins(r['points'])} |")
+    return head + "\n".join(lines)
+
+
+def baselines_markdown(rows, table, baselines, meta):
+    """The reference board: each entry's wins against each baseline."""
+    head = (f"# {meta['label']} -- {meta['date']} -- results against the baselines\n\n"
+            "For reference only: these games do not affect the rank. Each cell is "
+            "wins / games (a draw counts as half a win), "
+            f"{meta['seeds']} seeds x 2 seatings per baseline.\n\n")
+    lines = ["| Agent | " + " | ".join(baselines) + " |",
+             "|-------|" + "|".join("-----:" for _ in baselines) + "|"]
+    for r in rows:
+        cells = [f"{fmt_wins(w)} / {n}" if n else "-"
+                 for w, n in (table[r["alias"]][b] for b in baselines)]
+        lines.append(f"| {r['alias']} | " + " | ".join(cells) + " |")
     return head + "\n".join(lines)
 
 
@@ -496,8 +613,15 @@ def main() -> None:
     ap.add_argument("--zip-only", action="store_true",
                     help="unpack the zips, print the submission checklist, and stop")
     ap.add_argument("--out", default="course_ladder", help="output directory")
-    ap.add_argument("--games-per-pair", type=int, default=2,
-                    help="games between every pair (split evenly over both seatings)")
+    ap.add_argument("--seeds", default=None,
+                    help=f"seeds every pair plays, once in each seating: ranges and lists "
+                         f"such as 1-25 or 1-25,40 (default {DEFAULT_SEEDS} when "
+                         f"--seeds-file is not given)")
+    ap.add_argument("--seeds-file", default=None,
+                    help="add the seeds in this file (keep it outside the repository; "
+                         "see tools/make_private_seeds.py)")
+    ap.add_argument("--label", default="ladder",
+                    help="title of the published board, e.g. 'ladder 2' or 'final'")
     ap.add_argument("--baselines", default=DEFAULT_BASELINES,
                     help="comma-separated baseline names, or 'none'")
     ap.add_argument("--baseline-vs-baseline", action="store_true",
@@ -505,16 +629,35 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=0,
                     help="concurrent games (default: min(8, cpu-2)); each one runs "
                          "up to 2 agent processes, so watch memory with torch entries")
-    ap.add_argument("--time-limit", type=float, default=1.0, help="seconds per move")
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--time-limit", type=float, default=DEFAULT_TIME_LIMIT,
+                    help=f"seconds per decision (default {DEFAULT_TIME_LIMIT:g}, the course limit)")
     ap.add_argument("--date", default=None, help="output folder name (default: today)")
     ap.add_argument("--no-validate", action="store_true",
                     help="skip the sandbox check (not recommended)")
     ap.add_argument("--validate-games", type=int, default=2)
     ap.add_argument("--validate-only", action="store_true")
-    ap.add_argument("--no-games", action="store_true", help="do not save replays")
+    ap.add_argument("--no-games", action="store_true",
+                    help="do not save replays (they are organizer-only either way)")
     ap.add_argument("--dry-run", action="store_true", help="show the plan and stop")
     args = ap.parse_args()
+
+    try:
+        seeds = parse_seeds(args.seeds if args.seeds is not None
+                            else ("" if args.seeds_file else DEFAULT_SEEDS))
+        if args.seeds_file:
+            if inside_repo(args.seeds_file):
+                print(f"WARNING: {args.seeds_file} is inside the repository; a private "
+                      "seed list must never be committed")
+            extra = read_seeds_file(args.seeds_file)
+            dup = len(set(seeds) & set(extra))
+            if dup:
+                print(f"note: {dup} seeds in {args.seeds_file} are already in --seeds; "
+                      "each is played once")
+            seeds = unique(seeds + extra)
+    except (OSError, ValueError) as e:
+        sys.exit(f"bad seeds: {e}")
+    if not seeds:
+        sys.exit("no seeds to play")
 
     manifest = []
     if args.zips:
@@ -557,17 +700,20 @@ def main() -> None:
 
     players = ([{"alias": e["alias"], "kind": "student"} for e in entries]
                + [{"alias": b, "kind": "baseline"} for b in baselines])
-    tasks = build_tasks(players, args.games_per_pair, args.seed, args.baseline_vs_baseline)
+    tasks = build_tasks(players, seeds, args.baseline_vs_baseline)
     total_games = sum(len(t[2]) for t in tasks)
+    games_per_pair = 2 * len(seeds)
     student_pairs = len(entries) * (len(entries) - 1) // 2
     workers = args.workers or max(1, min(8, (os.cpu_count() or 4) - 2))
 
-    print(f"\nplan: {len(entries)} entries + {len(baselines)} baselines, "
+    print(f"\nseeds: {len(seeds)} x 2 seatings = {games_per_pair} games per pair, "
+          f"{args.time_limit:g} s per decision (seed list sha256 {seeds_digest(seeds)[:16]}...)")
+    print(f"plan: {len(entries)} entries + {len(baselines)} baselines, "
           f"{len(tasks)} pairings, {total_games} games "
-          f"({student_pairs * args.games_per_pair} of them between entries), "
+          f"({student_pairs * games_per_pair} of them between entries), "
           f"{workers} concurrent")
-    print("      estimated wall time at 1 / 10 / 60 / 300 s per game: "
-          + " / ".join(f"{total_games * s / workers / 3600:.1f} h" for s in (1, 10, 60, 300)))
+    print("      estimated wall time at 5 / 15 / 30 / 60 s per game: "
+          + " / ".join(f"{total_games * s / workers / 3600:.1f} h" for s in (5, 15, 30, 60)))
     if args.dry_run:
         return
 
@@ -601,8 +747,7 @@ def main() -> None:
                 sys.exit("every entry failed validation")
             players = ([{"alias": e["alias"], "kind": "student"} for e in entries]
                        + [{"alias": b, "kind": "baseline"} for b in baselines])
-            tasks = build_tasks(players, args.games_per_pair, args.seed,
-                                args.baseline_vs_baseline)
+            tasks = build_tasks(players, seeds, args.baseline_vs_baseline)
             total_games = sum(len(t[2]) for t in tasks)
     if args.validate_only:
         print(f"\nvalidation report: {out_dir}/validation.txt")
@@ -633,21 +778,28 @@ def main() -> None:
     kinds = {e["alias"]: "student" for e in entries}
     kinds.update({b: "baseline" for b in baselines})
     rows = build_boards(records, entries, baselines)
-    meta = {"date": date, "entries": len(entries), "baselines": baselines,
-            "games": len(records), "games_per_pair": args.games_per_pair,
-            "time_limit": args.time_limit, "seed": args.seed,
+    # The seed list itself is not written anywhere: the private seeds stay in
+    # the organizer's file. The digest identifies which list was played.
+    meta = {"label": args.label, "date": date, "entries": len(entries),
+            "baselines": baselines, "games": len(records), "seeds": len(seeds),
+            "games_per_pair": games_per_pair, "seed_list_sha256": seeds_digest(seeds),
+            "time_limit": args.time_limit,
             "wall_minutes": round((time.perf_counter() - started) / 60, 1)}
 
     md = students_markdown(rows, meta)
     with open(os.path.join(out_dir, "board_students.md"), "w", encoding="utf-8") as f:
         f.write(md + "\n")
-    write_csv(os.path.join(out_dir, "board_students.csv"), rows,
-              ["rank", "alias", "wins", "losses", "draws", "games", "win_rate",
-               "baseline_win_rate"])
+    write_csv(os.path.join(out_dir, "board_students.csv"),
+              [{"rank": r["rank"], "alias": r["alias"], "wins": fmt_wins(r["points"])}
+               for r in rows], ["rank", "alias", "wins"])
+    if baselines:
+        table = vs_baselines(records, entries, baselines)
+        with open(os.path.join(out_dir, "board_baselines.md"), "w", encoding="utf-8") as f:
+            f.write(baselines_markdown(rows, table, baselines, meta) + "\n")
     write_csv(os.path.join(out_dir, "board_organizer.csv"), rows,
-              ["rank", "student_id", "student_name", "file", "alias", "wins",
+              ["rank", "student_id", "student_name", "file", "alias", "points", "wins",
                "losses", "draws", "games", "win_rate", "ci_low", "ci_high", "elo",
-               "baseline_wins", "baseline_losses", "baseline_games",
+               "baseline_wins", "baseline_losses", "baseline_draws", "baseline_games",
                "baseline_win_rate", "timeouts", "illegal", "tampered", "mean_game_s"])
     with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump({"meta": meta, "board": rows}, f, indent=2, ensure_ascii=False)
@@ -669,8 +821,10 @@ def main() -> None:
         for r in flagged:
             print(f"  {r['alias']:<20} timeouts {r['timeouts']}, illegal "
                   f"{r['illegal']}, tampered {r['tampered']}")
-    print(f"\npublish: {out_dir}/board_students.md and {out_dir}/games/")
-    print(f"keep:    {out_dir}/board_organizer.csv (roster, Elo) and validation.txt")
+    published = "board_students.md" + (" and board_baselines.md" if baselines else "")
+    print(f"\npublish: {out_dir}/{published} (rank and wins only)")
+    print(f"keep:    {out_dir}/board_organizer.csv (roster, W/L/D, Elo), validation.txt, "
+          f"summary.json and games/ (replays are not published)")
     print(f"took {meta['wall_minutes']} min")
 
 

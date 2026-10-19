@@ -11,6 +11,27 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-19 — CNU course edition: 0.1 s, fixed seeds, wins and rank
+
+No engine or rule changes. The course edition's run settings and boards
+(docs/COURSE_CNU_2026.md):
+
+* **0.1 s per decision** in the course (the public competition keeps 1 s).
+  `tools/course_ladder.py` now defaults to 0.1 s; `play.py` and
+  `validate_submission.py` keep the 1 s default and take `--time-limit 0.1`.
+* **Fixed seed list, both seatings.** `course_ladder.py` plays every seed of
+  `--seeds` (default `1-25`) and `--seeds-file` once in each seating: a ladder
+  round is 25 seeds × 2 = 50 games per pair; the final run adds 475 private
+  seeds, drawn by the new `tools/make_private_seeds.py` and kept out of the
+  repository: 500 seeds × 2 = 1000 games per pair.
+* **Published board = rank and wins only** (a draw is half a win; equal wins
+  share a rank). Results against the baselines go on a separate reference
+  board; replays stay with the organizer.
+* `validate_submission.py` now prints `Result: …` as its last line, and accepts
+  an agent file given relative to any directory (the sandboxed games used to
+  look for it in the repository root). `play.py` notes when an opponent ran out
+  of time and played moves at random.
+
 ## 2026-08-20 — engine throughput pass (behavior-preserving)
 
 No rule changes. Pure performance refactors, available to every entrant's

@@ -69,9 +69,10 @@ staffed plantation of that crop — both occupied by colonists.
 ## Buildings
 
 There are **23 building types** (engine `BuildingType` 0–22). A player's city has
-**12 building spaces**. A building only grants its ability/VP while it is
-**staffed** (at least one colonist on it). Cost is in doubloons; *Cap* is how many
-colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
+**12 building spaces**. A building's **printed VP counts whether or not it is
+staffed**; its **ability** (and a large building's end‑game bonus) only works
+while it is **staffed** (at least one colonist on it). Cost is in doubloons; *Cap*
+is how many colonists it can hold. Values below are exact (engine `BUILDING_DATA`).
 
 **Production buildings** (turn staffed plantations into goods during Craftsman):
 

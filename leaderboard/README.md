@@ -21,3 +21,7 @@ python tools/replay_game.py leaderboard/2p/<date>/games/game_00012_12.json --mov
 The rounds are produced by `python tools/run_ladder.py` (see its docstring);
 the official metric is Elo in the 2p track and TrueSkill in the 3p track, as
 described in [`../docs/RANKING.md`](../docs/RANKING.md).
+
+The CNU course edition works differently: its ladder rounds publish only each
+entry's wins and rank, never the submitted code or the replays (see
+[`../docs/COURSE_CNU_2026.md`](../docs/COURSE_CNU_2026.md)).
