@@ -289,8 +289,12 @@ def seeds_digest(seeds):
 
 
 def inside_repo(path):
-    real = os.path.realpath(path)
-    return os.path.commonpath([real, os.path.realpath(ROOT)]) == os.path.realpath(ROOT)
+    """Whether ``path`` lies inside this repository (False on another drive)."""
+    root = os.path.realpath(ROOT)
+    try:
+        return os.path.commonpath([os.path.realpath(path), root]) == root
+    except ValueError:                       # Windows: different drives
+        return False
 
 
 # -------------------------------------------------------------- zip intake
