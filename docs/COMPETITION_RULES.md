@@ -167,14 +167,16 @@ class MyAgent(Agent):
 The same rules apply in both settings below; they differ in how much is
 **enforced** rather than trusted.
 
-- **Course setting / your own testing** — agents run **in-process**
-  (`tournament/match.py`). The time limit is measured after each move, and the
-  forward model you are handed is a live object. The harness does verify after
-  every move that you left the real game exactly as you found it, and reports
-  any breach as `tampered` in the game record.
-- **Public IEEE CoG run** — each agent runs in **its own process**
-  (`tournament/sandbox.py`). The organizer's process owns the game; your agent
-  never holds a reference to it. Consequences for you:
+- **Your own testing** (`tools/play.py`, the web UI, the notebook) — agents run
+  **in-process** (`tournament/match.py`). The time limit is measured after each
+  move, and the forward model you are handed is a live object. The harness does
+  verify after every move that you left the real game exactly as you found it,
+  and reports any breach as `tampered` in the game record.
+- **Official runs** — the public IEEE CoG run, and the CNU course's ladder rounds
+  and final run (`tools/course_ladder.py`) — each entry runs in **its own
+  process** (`tournament/sandbox.py`), as `tools/validate_submission.py` already
+  does. The organizer's process owns the game; your agent never holds a
+  reference to it. Consequences for you:
   - the per-move deadline is enforced by killing the worker (see above);
   - a planning agent still gets a forward model — a **determinized copy** of the
     game is handed to your process every move, and `clone()` / `step()` behave
@@ -190,7 +192,7 @@ rules, isolation changes nothing you can observe.
 
 - Submissions should be **your own work**.
 - Be respectful of compute: an agent that reliably finishes its moves **well
-  under 1 s** is appreciated.
+  under the limit** (1 s; 0.1 s in the CNU course) is appreciated.
 
 ## See also
 

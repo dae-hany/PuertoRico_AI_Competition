@@ -94,7 +94,7 @@ python tools/validate_submission.py my_agent.py:MyAgent                 # plays 
 
 `play.py` plays seat-rotated games under the competition rules and prints, per
 opponent, your win rate, mean VP margin, and per-move time, so you can see how
-close to the 1 s budget you are. `validate_submission.py` runs your file the way
+close to the budget (1 s; 0.1 s in the CNU course, `--time-limit 0.1`) you are. `validate_submission.py` runs your file the way
 the official run does — its own process, killed at the deadline — and prints a
 PASS / WARN / FAIL checklist (imports, name, timeouts, illegal moves) with exit
 status 0 when the entry is ready. Any recorded game (`--record`, or every game
@@ -189,7 +189,8 @@ tests/              pytest suite
   replay** under [`leaderboard/`](leaderboard/). Submit early, watch your rank,
   and resubmit as often as you like; the last file received before the deadline
   is the one that counts.
-- **How to submit.** To be announced with the dates. Until then, questions and
+- **How to submit.** To be announced with the dates (CNU course students: the
+  LMS, as described on the course page). Until then, questions and
   bug reports go to the
   [issue tracker](https://github.com/dae-hany/PuertoRico_AI_Competition/issues).
 

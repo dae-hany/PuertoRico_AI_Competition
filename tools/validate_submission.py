@@ -170,7 +170,8 @@ def check_source(cls, spec, report):
     if io_calls:
         report.add("WARN", "file access", f"calls to {', '.join(sorted(io_calls))} found - "
                    "the official run forbids disk I/O; if you load model weights, "
-                   "check with the organizer how to ship them")
+                   "check with the organizer how to ship them (the CNU course allows "
+                   "one weight file, so this WARN is expected there)")
 
 
 # -- 3. play inside the official sandbox --------------------------------------

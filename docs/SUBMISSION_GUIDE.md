@@ -67,7 +67,8 @@ class MyAgent(Agent):
         return int(legal[0])
 ```
 
-The starter returns a random legal move — replace it with real logic.
+The starter returns the first legal move (not a random one) — replace it with
+real logic.
 
 ## 4. Test against the baselines
 
@@ -127,8 +128,8 @@ leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 
 ## 6. Rules you must respect
 
-2 players (2p track) or 3 (3p track), **1 second per move**, always return a
-legal action. Going over the limit, returning an illegal action, or raising an
+2 players (2p track) or 3 (3p track), **1 second per move** (**0.1 s** in the CNU
+course), always return a legal action. Going over the limit, returning an illegal action, or raising an
 exception forfeits that move to a random legal one. Full rules:
 [COMPETITION_RULES.md](COMPETITION_RULES.md).
 
@@ -140,6 +141,7 @@ exactly as the tournament will:
 
 ```bash
 python tools/validate_submission.py my_agent.py:MyAgent
+python tools/validate_submission.py my_agent.py:MyAgent --track 2p --time-limit 0.1   # CNU course
 ```
 
 It prints a PASS / WARN / FAIL checklist and ends with `Result: READY` (exit
@@ -155,6 +157,8 @@ both observation lengths). Make sure it:
 - states which track(s) it is for.
 
 Where and when to submit is announced in the README's *The competition*
-section. During the competition window the organizer runs a weekly ladder over
+section. (CNU course students submit a zip through the LMS instead, and the
+course publishes only wins and rank, not replays: see
+[COURSE_CNU_2026.md](COURSE_CNU_2026.md).) During the competition window the organizer runs a weekly ladder over
 every entry received so far and publishes the standings and replays under
 `leaderboard/`, so submit early and resubmit whenever you improve.

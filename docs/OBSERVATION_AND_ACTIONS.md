@@ -35,7 +35,7 @@ layout below lets you build features if you want to.
 | `39–43` | Trader | sell the good `a − 39` (Good 0–4) to the trading house |
 | `44–58` | Captain | load a good on a ship: `ship = (a − 44) // 5`, `good = (a − 44) % 5` |
 | `59–63` | Captain | load good `a − 59` using your **Wharf** |
-| `64–68` | Captain (store) | keep good `a − 64` at the Windrose / Office |
+| `64–68` | Captain (store) | keep good `a − 64`: the one good you keep at the end of the Captain phase (the "windrose") |
 | `93–97` | Craftsman | choose your privilege good `a − 93` |
 | `105` | Settler | Hacienda: draw one extra random plantation |
 | `106–110` | Captain (store) | keep good `a − 106` in your Warehouse |

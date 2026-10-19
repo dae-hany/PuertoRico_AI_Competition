@@ -19,14 +19,15 @@ choosing **roles**, then producing and shipping **goods** and constructing
 2. The **printed VP value** of buildings you own.
 3. The **end‑game bonuses** of the five large buildings (see below).
 
-The highest total VP wins. Ties are broken by **leftover doubloons + goods**.
+The highest total VP wins. Ties are broken by **leftover doubloons + goods**; if
+that is tied too, the tied players share the win.
 
 ## Roles and the round structure
 
 Each round, players take turns choosing a role that **nobody else has taken yet**
 that round. When a role is chosen, **every** player performs that role's action in
 turn order — but the player who *chose* it gets a small **privilege** (an extra
-good, a discount, or shipping priority). Any role left unpicked at the end of a
+good, a discount, a bonus VP). Any role left unpicked at the end of a
 round gains **one doubloon**, making it more attractive next round.
 
 How many roles are on the table and picked each round depends on the track:
@@ -148,7 +149,8 @@ The current round finishes and the game ends when **any** of these occurs:
 - the **colonist supply** cannot refill the colonist ship, or
 - any player fills **all 12** of their city building spaces.
 
-Highest total VP wins; ties broken by leftover doubloons + goods.
+Highest total VP wins; ties broken by leftover doubloons + goods (still tied:
+the tied players share the win).
 
 ## Setup by player count
 

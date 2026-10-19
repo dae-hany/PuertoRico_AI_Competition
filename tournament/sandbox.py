@@ -1,7 +1,7 @@
 """tournament/sandbox.py — run a submitted agent in its own process.
 
-``tournament.match`` runs agents in-process, which is right for the course
-setting and for local testing. Two competition rules are only advisory there:
+``tournament.match`` runs agents in-process, which is right for local testing.
+Two competition rules are only advisory there:
 
 * **the per-move budget is measured after the fact** — an agent that never
   returns stalls the whole run rather than forfeiting one move, and
@@ -9,7 +9,8 @@ setting and for local testing. Two competition rules are only advisory there:
   documented API can mutate the real game or read the face-down plantation
   order.
 
-This module removes both by construction, for the public run:
+This module removes both by construction, for the official runs (the public
+run, and ``tools/course_ladder.py`` for the course):
 
 * Each agent runs in a **separate process**. The organizer's process owns the
   environment, so an isolated agent has nothing to corrupt and nothing to peek

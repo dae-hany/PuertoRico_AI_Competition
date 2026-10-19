@@ -12,12 +12,12 @@ See ``docs/COMPETITION_RULES.md`` for the exact rules.
 The function returns a per-game record (finishing ranks, winners, scores, and
 rule-violation counts) that the rankers in ``tournament/rankers`` consume.
 
-Agents run **in this process** here, which is right for the course setting and
-for local testing but leaves two rules on the honour system: the per-move budget
+Agents run **in this process** here, which is right for local testing but leaves
+two rules on the honour system: the per-move budget
 is measured *after* the fact (a hung agent stalls the run), and the forward model
 an agent is handed is a live object it could in principle mutate. ``tampered``
 in the result closes the second gap by *checking* rather than trusting — see
-``_state_fingerprint``. For the public run, use ``tournament.sandbox`` instead,
+``_state_fingerprint``. For official runs (the public run, the course ladder), use ``tournament.sandbox`` instead,
 which enforces both by construction.
 """
 import time
