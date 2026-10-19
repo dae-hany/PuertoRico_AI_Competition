@@ -18,9 +18,10 @@ the same consistent world and the actions stored in the tree stay legal in it.
 
 Strong but slow, and it has **no internal time cap** — cost is
 ``num_simulations`` x rollout length regardless of the clock. Tune
-``num_simulations`` / ``max_rollout_depth`` to your per-move time budget (the
-competition allows 1 s/move — see ``docs/COMPETITION_RULES.md``); the default of
-200 does *not* fit that budget on a typical machine.
+``num_simulations`` / ``max_rollout_depth`` to your per-move time budget. An
+entrant has 0.1 s per decision (see ``docs/COMPETITION_RULES.md``), which the
+default of 60 simulations does *not* fit; as a bundled baseline, MCTS keeps its
+own 1 s budget, which the default fits.
 """
 import math
 
@@ -116,10 +117,10 @@ class MctsAgent(Agent):
 
     Args:
         num_simulations: rollouts per move (higher = stronger and slower). The
-            default is chosen to fit the competition's 1 s/move budget with room
+            default is chosen to fit the bundled baselines' 1 s budget with room
             to spare — measured ~0.3 s/move, where the previous default of 200
-            sat right on the limit and would time out on a slower machine, i.e.
-            the baseline would have been breaking the rule entrants must keep.
+            sat right on the limit and would time out on a slower machine. An
+            entrant has 0.1 s per decision: use far fewer simulations.
         c_uct: UCT exploration constant (default ``sqrt(2)``).
         max_rollout_depth: cap rollout length; ``None`` plays to the end.
         seed: RNG seed for reproducibility.

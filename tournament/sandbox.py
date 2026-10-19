@@ -23,7 +23,7 @@ run, and ``tools/course_ladder.py`` for the course):
   determinized copy in which the hidden draw order has already been reshuffled
   — and the worker wraps it in a forward model that clones and simulates
   exactly as the in-process one does. Measured cost is ~2 ms per move against a
-  1 s budget.
+  0.1 s budget.
 
 Usage::
 
@@ -331,7 +331,7 @@ class SandboxedAgent:
     """
 
     def __init__(self, spec: str, *, worker: AgentWorker = None, name: str = None,
-                 time_limit_s: float = 1.0, mem_limit_mb=DEFAULT_MEM_LIMIT_MB,
+                 time_limit_s: float = 0.1, mem_limit_mb=DEFAULT_MEM_LIMIT_MB,
                  max_consecutive_timeouts: int = 3):
         self.spec = spec
         self.time_limit_s = time_limit_s
@@ -438,7 +438,7 @@ class SandboxedAgent:
 
 # ── building a tournament pool ───────────────────────────────────────────────
 
-def sandboxed_pool(specs: dict, n_seats: int = 3, *, time_limit_s: float = 1.0,
+def sandboxed_pool(specs: dict, n_seats: int = 3, *, time_limit_s: float = 0.1,
                    mem_limit_mb=DEFAULT_MEM_LIMIT_MB):
     """Turn ``{name: spec}`` into a ``{name: factory}`` pool of isolated agents.
 

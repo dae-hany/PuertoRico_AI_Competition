@@ -42,7 +42,8 @@ subclass; a weight file may sit beside it (the agent locates it from
         --out C:/course_2p/out --label final --seeds 1-25 \
         --seeds-file C:/course_2p/private_seeds.txt --workers 8
 
-The time limit defaults to the course's **0.1 s per decision**. The code zips
+The time limit defaults to **0.1 s per decision** (the competition rule; the
+bundled baselines keep their own 1 s budget). The code zips
 and the report zips are both named ``<student id>_<name>.zip``; keep them in
 separate folders and give ``--zips`` the code zips only.
 
@@ -84,7 +85,7 @@ if ROOT not in sys.path:
 
 from agents.registry import BASELINES, baseline_names, lookup_baseline  # noqa: E402
 from puerto_rico.records import record_from_result, save_record  # noqa: E402
-from tournament.match import play_game                          # noqa: E402
+from tournament.match import TIME_LIMIT_S, play_game            # noqa: E402
 from tournament.rankers.elo import rank_elo                     # noqa: E402
 from tournament.rankers.win_rate import wilson_ci               # noqa: E402
 
@@ -92,7 +93,7 @@ N_SEATS = 2                                   # this tool is the 1-vs-1 track
 FILENAME_RE = re.compile(r"^(?P<sid>[0-9]{4,12})_(?P<name>.+)$")
 DEFAULT_BASELINES = "random,factory,shippingrush,tradebuilding,actionvalue,searchlite"
 DEFAULT_SEEDS = "1-25"                        # the course's public ladder seeds
-DEFAULT_TIME_LIMIT = 0.1                      # the course's limit per decision
+DEFAULT_TIME_LIMIT = TIME_LIMIT_S             # 0.1 s per decision, as in the competition
 
 WEIGHT_EXTS = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".bin", ".safetensors",
                ".pkl", ".h5", ".onnx"}
@@ -634,7 +635,7 @@ def main() -> None:
                     help="concurrent games (default: min(8, cpu-2)); each one runs "
                          "up to 2 agent processes, so watch memory with torch entries")
     ap.add_argument("--time-limit", type=float, default=DEFAULT_TIME_LIMIT,
-                    help=f"seconds per decision (default {DEFAULT_TIME_LIMIT:g}, the course limit)")
+                    help=f"seconds per decision for an entry (default {DEFAULT_TIME_LIMIT:g})")
     ap.add_argument("--date", default=None, help="output folder name (default: today)")
     ap.add_argument("--no-validate", action="store_true",
                     help="skip the sandbox check (not recommended)")

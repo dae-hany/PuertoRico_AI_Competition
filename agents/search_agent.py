@@ -14,8 +14,9 @@ How it works
   not by ply parity. Values are zero-sum margins from the root player's view
   (see ``agents/eval2p.py``).
 * **Iterative deepening** with a wall-clock cap: search depth 1, 2, 3, … and keep
-  the best move from the deepest *completed* depth. The per-move budget is 1 s
-  (competition rule); we stop early and return the best move so far.
+  the best move from the deepest *completed* depth. As a bundled baseline it
+  has a 1 s budget (an entrant has 0.1 s, see docs/COMPETITION_RULES.md); we
+  stop early and return the best move so far.
 * **Move ordering** reuses ``ActionValueAgent``'s static action score so good
   moves are tried first, which makes alpha-beta prune far more.
 * **Determinization** of the hidden plantation order: at the start of each move we
@@ -45,8 +46,10 @@ class SearchAgent(Agent):
     """Iterative-deepening alpha-beta agent for 1-vs-1 Puerto Rico.
 
     Args:
-        time_limit_s: hard per-move wall-clock safety ceiling (< the 1 s
-            competition limit). A move never overruns this.
+        time_limit_s: hard per-move wall-clock safety ceiling (< the bundled
+            baselines' 1 s budget). A move never overruns this. An entry built
+            on this class has 0.1 s per decision: set it below that (e.g.
+            0.08) and lower ``node_budget`` so the budget, not the cap, binds.
         max_depth: hard cap on iterative-deepening depth (plies).
         determinize: reshuffle the hidden plantation order before searching.
         seed: RNG seed for determinization (fixed → reproducible play).
@@ -67,11 +70,11 @@ class SearchAgent(Agent):
         # node_budget makes strength reproducible across hardware: the search
         # stops after exactly this many nodes, so it plays the SAME move on a fast
         # or slow machine (only the wall time differs). A fixed search *depth*
-        # cannot do this — high-branching positions blow past 1 s before the depth
+        # cannot do this — high-branching positions blow past the clock before the depth
         # completes, so the time cap (hardware-dependent) would bind instead.
         # Set node_budget=None for max-strength play that uses the full time
         # budget (stronger, but hardware-dependent). time_limit_s is always a hard
-        # safety ceiling so a move never overruns the 1 s competition limit.
+        # safety ceiling so a move never overruns the baselines' 1 s budget.
         self.time_limit_s = time_limit_s
         self.max_depth = max_depth
         self.determinize = determinize

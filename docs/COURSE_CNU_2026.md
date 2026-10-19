@@ -4,9 +4,9 @@ The 2p track is the **final project** of the Reinforcement Learning course in
 the Department of Artificial Intelligence, Chonnam National University, in the
 2026 autumn semester. It is an **individual** assignment. This page holds
 **only what differs** from the general competition: everything else (the
-engine, the observation and action encoding, legality, the sandbox, the hidden
-plantation order) is in [COMPETITION_RULES.md](COMPETITION_RULES.md) and
-applies unchanged.
+engine, the observation and action encoding, the **0.1 s per-decision limit**,
+legality, the sandbox, the hidden plantation order) is in
+[COMPETITION_RULES.md](COMPETITION_RULES.md) and applies unchanged.
 
 **Where the two disagree, this page wins** for the course. (Entrants in the
 public IEEE CoG edition follow COMPETITION_RULES.md alone.)
@@ -14,7 +14,6 @@ public IEEE CoG edition follow COMPETITION_RULES.md alone.)
 | | Course (this page) | Public competition |
 |---|---|---|
 | Track | **2p only** | 2p and 3p |
-| Time per decision | **0.1 s** | 1 s |
 | Ranking | **wins and rank** in games between students (a draw is ½ a win) | Elo (2p) / TrueSkill (3p) |
 | Weight file | **one file allowed** (`weights.pt`) | no disk I/O |
 | Deliverables | **two zips**: code (agent + README + optional weights), then write-up + presentation | agent file |
@@ -79,8 +78,8 @@ name; the ladder refuses to run until such a clash is fixed.
 
 ## Run rules
 
-- **0.1 s per decision.** A decision that takes longer is replaced by a
-  **random legal action**. Leave a margin in your slowest positions (p95, max),
+- **0.1 s per decision** (the same as the public competition). A decision that
+  takes longer is replaced by a **random legal action**. Leave a margin in your slowest positions (p95, max),
   not just on average.
 - Return an action the **mask allows**. An illegal action or an exception is
   also replaced by a random legal action.
@@ -100,7 +99,8 @@ plantation tile order.
 Python standard library, NumPy, PyTorch and this repository's modules.
 
 The bundled `Search` (1500 nodes) and `MCTS` examples take more than 0.1 s per
-decision; if you build on them, reduce the node or simulation count.
+decision; if you build on them, reduce the node or simulation count. (As bundled
+baselines they keep their own 1 s budget; an entry built on their code does not.)
 
 ### The weight file (course exception)
 

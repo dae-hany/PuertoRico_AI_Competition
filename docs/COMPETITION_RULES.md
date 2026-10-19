@@ -6,9 +6,9 @@ the time limit, legality, and how the official run is executed.
 They are also the technical rules of the **course edition** currently running —
 the 2p track as the final project of the Reinforcement Learning course at
 Chonnam National University. That edition changes a few things on top (it is 2p
-only, allows **0.1 s per decision** instead of 1 s, ranks by wins and rank in
-games between students rather than by Elo, allows one weight file, and takes a
-code zip and a separate report and presentation zip): see
+only, ranks by wins and rank in games between students rather than by Elo,
+allows one weight file, and takes a code zip and a separate report and
+presentation zip): see
 **[COURSE_CNU_2026.md](COURSE_CNU_2026.md)**, which takes precedence for
 students of that course. Everything not listed there is governed by this page.
 
@@ -62,10 +62,12 @@ class MyAgent(Agent):
 
 ## Per-move time limit
 
-- You have **1 second of wall-clock time per move**. (The CNU course edition
-  allows **0.1 s**; see [COURSE_CNU_2026.md](COURSE_CNU_2026.md).)
-- If a move exceeds 1 s, the harness **discards your move**, plays a **uniformly
-  random legal action** instead, and records a **timeout**.
+- You have **0.1 s (100 ms) of wall-clock time per decision**, in both tracks.
+- If a decision takes longer, the harness **discards your move**, plays a
+  **uniformly random legal action** instead, and records a **timeout**.
+- Check your **slowest** positions, not just the average: `tools/play.py` prints
+  the p95 and the maximum, and `tools/validate_submission.py` runs your agent
+  under the real deadline.
 - In the official run this is **enforced, not just measured**: your agent runs in
   its own process and is **killed** when the budget expires, so a move that never
   returns costs you that move rather than hanging the tournament. A killed agent
@@ -73,6 +75,12 @@ class MyAgent(Agent):
   the game is lost** — one more reason to finish well inside the budget.
 - An agent that overruns **repeatedly** stops being restarted and **forfeits the
   rest of that game** (its remaining moves are played at random).
+- **The bundled baselines are not entrants.** They are reference opponents whose
+  strength is fixed by a node or simulation budget, not by the clock, and they
+  keep the **1 s** budget they were designed for (`Search` at 1500 nodes and
+  `MCTS` need more than 0.1 s per move). The exemption goes by the baseline's
+  exact class, so an entry built on a baseline's code is held to 0.1 s: lower its
+  node or simulation budget to fit.
 
 ## Legality and errors
 
@@ -192,7 +200,7 @@ rules, isolation changes nothing you can observe.
 
 - Submissions should be **your own work**.
 - Be respectful of compute: an agent that reliably finishes its moves **well
-  under the limit** (1 s; 0.1 s in the CNU course) is appreciated.
+  under the 0.1 s limit** is appreciated.
 
 ## See also
 

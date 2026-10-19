@@ -6,7 +6,7 @@ between two agents and reports, per matchup:
     win% (ties count as 0.5), mean final VP margin, per-move time (mean / p95 /
     max), and any timeouts / illegal moves.
 
-Move timing matters: a search agent must stay under the 1 s/move budget, and
+Move timing matters: an entrant must stay under the 0.1 s per-decision budget, and
 this surfaces the real wall-clock cost so you catch overruns before they become
 random-fallback timeouts on the leaderboard.
 
@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents import (ActionValueAgent, FactoryAgent, RandomAgent,  # noqa: E402
                     ShippingRushAgent, TradeBuildingAgent)
-from tournament.match import play_game  # noqa: E402
+from tournament.match import TIME_LIMIT_S, play_game, seat_time_limits  # noqa: E402
 
 # name -> zero-arg factory. New agents (e.g. the search agent) register here.
 REGISTRY = {
@@ -66,7 +66,7 @@ class _Timed:
         return a
 
 
-def duel(a_name, b_name, n, seed0=1000, time_limit_s=1.0):
+def duel(a_name, b_name, n, seed0=1000, time_limit_s=TIME_LIMIT_S):
     wa = wb = tie = 0
     margins, a_times, to, il = [], [], 0, 0
     for g in range(n):
@@ -74,7 +74,8 @@ def duel(a_name, b_name, n, seed0=1000, time_limit_s=1.0):
         fa, fb = REGISTRY[a_name], REGISTRY[b_name]
         agents = [_Timed(fb()), _Timed(fa())] if swap else [_Timed(fa()), _Timed(fb())]
         ai, bi = (1, 0) if swap else (0, 1)
-        r = play_game(agents, seed=seed0 + g, time_limit_s=time_limit_s)
+        limits = seat_time_limits([a.agent for a in agents], time_limit_s)
+        r = play_game(agents, seed=seed0 + g, time_limit_s=limits)
         to += r["timeouts"][ai]
         il += r["illegal"][ai]
         a_times.extend(agents[ai].times)
@@ -102,7 +103,7 @@ def main():
     ap.add_argument("--opponents", default="", help="comma-separated; default = all others")
     ap.add_argument("--n", type=int, default=20, help="games per matchup (seat-balanced)")
     ap.add_argument("--seed", type=int, default=1000)
-    ap.add_argument("--time-limit", type=float, default=1.0)
+    ap.add_argument("--time-limit", type=float, default=TIME_LIMIT_S)
     args = ap.parse_args()
 
     if args.agent not in REGISTRY:

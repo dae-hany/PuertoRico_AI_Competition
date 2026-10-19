@@ -21,7 +21,8 @@ Writes, per track:
 A round-robin grows quadratically with the field: with E entries and B
 baselines the 2p track plays (E+B)(E+B+1) games per games-per-seating (every
 ordered pair, including self-play seatings), each up to ~300 decisions at up
-to 1 s each. Print-only estimate first with --dry-run.
+to 0.1 s each for an entry (the bundled baselines keep their own 1 s budget).
+Print-only estimate first with --dry-run.
 """
 from __future__ import annotations
 
@@ -39,6 +40,7 @@ if ROOT not in sys.path:
 from agents.registry import BASELINES, baseline_names  # noqa: E402
 from puerto_rico.records import record_from_result, save_record  # noqa: E402
 from tournament.leaderboard import save  # noqa: E402
+from tournament.match import TIME_LIMIT_S  # noqa: E402
 from tournament.runner import run_tournament  # noqa: E402
 from tournament.sandbox import sandboxed_pool  # noqa: E402
 
@@ -156,7 +158,8 @@ def main() -> None:
                     "every baseline built for the track")
     ap.add_argument("--games-per-seating", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--time-limit", type=float, default=1.0)
+    ap.add_argument("--time-limit", type=float, default=TIME_LIMIT_S,
+                    help=f"seconds per decision for an entry (default {TIME_LIMIT_S:g})")
     ap.add_argument("--out", default="leaderboard")
     ap.add_argument("--date", default=None, help="folder name (default: today)")
     ap.add_argument("--no-games", action="store_true", help="do not save replay records")

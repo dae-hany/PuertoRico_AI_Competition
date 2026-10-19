@@ -5,7 +5,7 @@ it. You only need to write one method: `act`.
 
 > Taking the Chonnam National University **Reinforcement Learning** course? The
 > 2p track is your final project, and it changes a few rules in this guide
-> (0.1 s per decision, the code zip and the separate report zip, the weight
+> (the code zip and the separate report zip, the weight
 > file, ranking by wins and rank, the four ladder rounds, submission through
 > the LMS): [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
 
@@ -128,8 +128,8 @@ leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 
 ## 6. Rules you must respect
 
-2 players (2p track) or 3 (3p track), **1 second per move** (**0.1 s** in the CNU
-course), always return a legal action. Going over the limit, returning an illegal action, or raising an
+2 players (2p track) or 3 (3p track), **0.1 s per decision**, always return a
+legal action. Going over the limit, returning an illegal action, or raising an
 exception forfeits that move to a random legal one. Full rules:
 [COMPETITION_RULES.md](COMPETITION_RULES.md).
 
@@ -140,8 +140,8 @@ and plays games with your agent in its own process under the real deadline,
 exactly as the tournament will:
 
 ```bash
-python tools/validate_submission.py my_agent.py:MyAgent
-python tools/validate_submission.py my_agent.py:MyAgent --track 2p --time-limit 0.1   # CNU course
+python tools/validate_submission.py my_agent.py:MyAgent               # both tracks
+python tools/validate_submission.py my_agent.py:MyAgent --track 2p    # one track
 ```
 
 It prints a PASS / WARN / FAIL checklist and ends with `Result: READY` (exit

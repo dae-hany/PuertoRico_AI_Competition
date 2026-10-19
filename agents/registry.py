@@ -20,6 +20,28 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PPO_CHECKPOINT = os.path.join(REPO_ROOT, "training", "checkpoints", "ppo_baseline.pt")
 
 
+#: The bundled baselines' classes, for :func:`is_bundled_baseline`.
+_BASELINE_CLASSES = (RandomAgent, FactoryAgent, ShippingRushAgent, TradeBuildingAgent,
+                     ActionValueAgent, MctsAgent, SearchLiteAgent, SearchAgent)
+
+
+def is_bundled_baseline(agent) -> bool:
+    """Whether ``agent`` is an instance of one of the bundled baseline classes.
+
+    The harness gives these reference opponents their own time budget
+    (``tournament.match.BASELINE_TIME_LIMIT_S``): their strength is fixed by a
+    node or simulation budget, not by the clock, and some of them need more
+    than an entrant's 0.1 s. The test is on the **exact** class, so a subclass
+    or a copy is an entrant; and a sandboxed entrant is a proxy object, which
+    never matches.
+    """
+    cls = type(agent)
+    if cls in _BASELINE_CLASSES:
+        return True
+    # PPO needs torch, so it is recognised without importing it.
+    return cls.__module__ == "agents.ppo_agent" and cls.__name__ == "PpoAgent"
+
+
 def _ppo():
     from agents import PpoAgent          # lazy: needs torch
     return PpoAgent(PPO_CHECKPOINT if os.path.exists(PPO_CHECKPOINT) else None)
