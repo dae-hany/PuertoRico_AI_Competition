@@ -17,7 +17,7 @@ Flat layout::
     [ global(74) | player_0(73) | player_1(73) | ... ]
 
 Within each block the sub-features are concatenated in *sorted key order*.
-This exact ordering is the one the bundled (3p) PPO baseline was trained on, so
+This exact ordering is the one the bundled PPO checkpoints were trained on, so
 it must not change. The action space is a fixed ``Discrete(200)`` in both tracks.
 See ``docs/OBSERVATION_AND_ACTIONS.md`` for the full field map.
 """

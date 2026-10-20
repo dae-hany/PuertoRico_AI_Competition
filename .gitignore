@@ -22,6 +22,7 @@ results/
 # Model weights: ignore everything except the bundled baseline checkpoint
 *.pt
 !training/checkpoints/ppo_baseline.pt
+!training/checkpoints/ppo_baseline_2p.pt
 
 # Participants' local agents in the web UI (keep the example + readme)
 submissions/*.py

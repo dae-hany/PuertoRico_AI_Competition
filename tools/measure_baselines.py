@@ -36,7 +36,8 @@ for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PPO_CHECKPOINT = os.path.join(ROOT, "training", "checkpoints", "ppo_baseline.pt")
+PPO_CHECKPOINTS = {2: os.path.join(ROOT, "training", "checkpoints", "ppo_baseline_2p.pt"),
+                   3: os.path.join(ROOT, "training", "checkpoints", "ppo_baseline.pt")}
 
 # Stated compute budgets for the planning baselines. These are part of their
 # identity: quoting "MCTS beats X" without the budget is meaningless.
@@ -70,7 +71,7 @@ def make_agent(name):
         return SearchAgent()
     if name == "PPO":
         from agents.ppo_agent import PpoAgent
-        return PpoAgent(PPO_CHECKPOINT)
+        return PpoAgent([p for p in PPO_CHECKPOINTS.values() if os.path.exists(p)])
     raise KeyError(name)
 
 
@@ -194,14 +195,14 @@ def main():
 
     if not args.skip_planners:
         planners = {
-            2: [f"MCTS{MCTS_SIMS}", "SearchLite250", "Search1500"],
+            2: [f"MCTS{MCTS_SIMS}", "SearchLite250", "Search1500", "PPO"],
             3: [f"MCTS{MCTS_SIMS}", "PPO"],
         }
         # The slow cells get fewer games; the table prints the count per cell.
         cheap = {"PPO", "SearchLite250"}
         for n_seats, focals in planners.items():
             for focal in focals:
-                if focal == "PPO" and not os.path.exists(PPO_CHECKPOINT):
+                if focal == "PPO" and not os.path.exists(PPO_CHECKPOINTS[n_seats]):
                     continue
                 n = duel_n if focal in cheap else max(6, duel_n // 3)
                 for j, opponent in enumerate(HEURISTICS):
@@ -249,8 +250,11 @@ def main():
 
     text = "\n".join(out)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as handle:
+    with open(args.out, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text + "\n")
+    # The tables hold em-dashes, which a cp949 (Korean Windows) console cannot
+    # print; the file above is already written, so do not crash on the echo.
+    sys.stdout.reconfigure(errors="replace")
     print(text)
     print(f"\nWritten to {args.out} in {(time.time() - started) / 60:.1f} min")
 

@@ -18,6 +18,16 @@ from agents import (ActionValueAgent, FactoryAgent, MctsAgent, RandomAgent,
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PPO_CHECKPOINT = os.path.join(REPO_ROOT, "training", "checkpoints", "ppo_baseline.pt")
+PPO_CHECKPOINT_2P = os.path.join(REPO_ROOT, "training", "checkpoints", "ppo_baseline_2p.pt")
+
+#: the bundled PPO checkpoint for each track (player count)
+PPO_CHECKPOINTS = {2: PPO_CHECKPOINT_2P, 3: PPO_CHECKPOINT}
+
+
+def ppo_tracks():
+    """The tracks a bundled PPO checkpoint exists for (3p alone when none does,
+    where the PPO baseline is an untrained network)."""
+    return tuple(n for n, p in PPO_CHECKPOINTS.items() if os.path.exists(p)) or (3,)
 
 
 #: The bundled baselines' classes, for :func:`is_bundled_baseline`.
@@ -44,7 +54,8 @@ def is_bundled_baseline(agent) -> bool:
 
 def _ppo():
     from agents import PpoAgent          # lazy: needs torch
-    return PpoAgent(PPO_CHECKPOINT if os.path.exists(PPO_CHECKPOINT) else None)
+    paths = [p for p in PPO_CHECKPOINTS.values() if os.path.exists(p)]
+    return PpoAgent(paths or None)       # one network per track it has weights for
 
 
 #: name -> zero-argument factory, in rough order of strength.
@@ -57,11 +68,11 @@ BASELINES = {
     "MCTS": MctsAgent,                   # 60 simulations, both tracks (slow)
     "SearchLite": SearchLiteAgent,       # alpha-beta, 250 nodes (2p; reactive in 3p)
     "Search": SearchAgent,               # alpha-beta, 1500 nodes (2p; reactive in 3p)
-    "PPO": _ppo,                         # RL baseline, 3p only, needs torch
+    "PPO": _ppo,                         # RL baseline, one checkpoint per track, needs torch
 }
 
 #: which tracks (player counts) a baseline is meant for; absent = both.
-BASELINE_TRACKS = {"SearchLite": (2,), "Search": (2,), "PPO": (3,)}
+BASELINE_TRACKS = {"SearchLite": (2,), "Search": (2,), "PPO": ppo_tracks()}
 
 #: the fast opponents the tools play against when none are named
 DEFAULT_OPPONENTS = {2: ["ActionValue", "TradeBuilding"],
@@ -71,7 +82,8 @@ DEFAULT_OPPONENTS = {2: ["ActionValue", "TradeBuilding"],
 def baseline_names(num_players: int = None, include_ppo: bool = None):
     """Baseline names for a track (all of them when ``num_players`` is None).
 
-    PPO is listed for the 3p track only when torch imports.
+    PPO is listed only when torch imports, and only for the tracks it has a
+    checkpoint for.
     """
     names = []
     for name in BASELINES:

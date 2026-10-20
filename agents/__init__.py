@@ -4,7 +4,7 @@ Baselines, by the track they are built for:
 
     SearchAgent         — alpha-beta lookahead, 2p (reactive fallback in 3p)
     SearchLiteAgent     — the same search on a small node budget (beginner target)
-    PpoAgent            — PPO self-play RL (3p only: its checkpoint is 293-dim)
+    PpoAgent            — PPO self-play RL, one bundled checkpoint per track
     MctsAgent           — Max^N UCT planning, both tracks (strong, slow)
     ActionValueAgent    — greedy heuristic action scorer (fast)
     ShippingRushAgent   — shipping-focused heuristic

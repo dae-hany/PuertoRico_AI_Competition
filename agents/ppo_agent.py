@@ -11,10 +11,14 @@ The network itself is track-agnostic — its input width is just
 trained on**: 220-dim weights for the 2p track, 293-dim for 3p. ``PpoAgent``
 reads the width out of the checkpoint, so you never have to state it.
 
-The bundled checkpoint is 5M steps of parameter-sharing self-play **in the 3p
-track**. Train a 2p one with ``python training/train_ppo.py --num_players 2``;
-see ``training/README.md``.
+Two checkpoints are bundled, one per track, each 5M steps of
+parameter-sharing self-play with the trainer's default settings:
+``training/checkpoints/ppo_baseline_2p.pt`` (2p) and
+``training/checkpoints/ppo_baseline.pt`` (3p). Give ``PpoAgent`` both and it
+plays whichever track it is seated in; see ``training/README.md``.
 """
+import os
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -106,6 +110,10 @@ class PpoNetwork(nn.Module):
 class PpoAgent(Agent):
     """Plays a trained :class:`PpoNetwork` greedily (highest-probability legal move).
 
+    ``checkpoint_path`` is one checkpoint, or a list of them with one per track
+    (the agent then picks the network whose input width matches the
+    observation it is handed). ``None`` builds an untrained 3p network.
+
     Checkpoints trained by ``training/train_ppo.py`` use the **egocentric** view
     (:func:`puerto_rico.observation.egocentric_view`), so the same rotation is
     applied here before the forward pass. The flag is read back from the
@@ -114,16 +122,35 @@ class PpoAgent(Agent):
 
     name = "PPO"
 
-    def __init__(self, checkpoint_path: str = None, obs_dim: int = None,
+    def __init__(self, checkpoint_path=None, obs_dim: int = None,
                  action_dim: int = ACTION_DIM, device: str = "cpu",
                  egocentric: bool = None):
         super().__init__()
         self.device = device
 
+        if checkpoint_path is None or isinstance(checkpoint_path, (str, os.PathLike)):
+            paths = [checkpoint_path]
+        else:
+            paths = list(checkpoint_path)
+
+        # obs width -> (network, egocentric), one entry per track.
+        self._nets = {}
+        for path in paths:
+            width, net, ego = self._load(path, obs_dim, action_dim, device)
+            if width in self._nets:
+                raise ValueError(f"two checkpoints for the same track (obs {width})")
+            self._nets[width] = (net, ego if egocentric is None else egocentric)
+
+        # The first network, under the attribute names single-checkpoint code uses.
+        self.obs_dim = next(iter(self._nets))
+        self.net, self.egocentric = self._nets[self.obs_dim]
+
+    @staticmethod
+    def _load(path, obs_dim, action_dim, device):
         state = None
         ckpt_egocentric = True           # what train_ppo.py produces today
-        if checkpoint_path is not None:
-            ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        if path is not None:
+            ckpt = torch.load(path, map_location=device, weights_only=False)
             if isinstance(ckpt, dict) and "model_state" in ckpt:
                 state = ckpt["model_state"]
                 # Absent flag ⇒ a pre-egocentric checkpoint (absolute seat order).
@@ -136,28 +163,30 @@ class PpoAgent(Agent):
                 # checkpoint is 220-dim and would not load into a 293-dim net.
                 obs_dim = int(state["embed.0.weight"].shape[1])
 
-        self.obs_dim = obs_dim if obs_dim is not None else OBS_DIM
-        self.net = PpoNetwork(self.obs_dim, action_dim).to(device)
+        width = obs_dim if obs_dim is not None else OBS_DIM
+        net = PpoNetwork(width, action_dim).to(device)
         if state is not None:
-            self.net.load_state_dict(state)
-        self.egocentric = ckpt_egocentric if egocentric is None else egocentric
-        self.net.eval()
+            net.load_state_dict(state)
+        net.eval()
+        return width, net, ckpt_egocentric
 
     def act(self, observation: np.ndarray, action_mask: np.ndarray) -> int:
-        if len(observation) != self.obs_dim:
+        entry = self._nets.get(len(observation))
+        if entry is None:
+            tracks = ", ".join(f"{(w - 74) // 73}p (obs {w})" for w in self._nets)
             raise ValueError(
-                f"this checkpoint plays the "
-                f"{(self.obs_dim - 74) // 73}p track (obs {self.obs_dim}), but it "
-                f"was given a {len(observation)}-dim observation. A checkpoint is "
+                f"this agent's checkpoints play the {tracks} track, but it was "
+                f"given a {len(observation)}-dim observation. A checkpoint is "
                 f"only valid for the track it was trained on.")
-        if self.egocentric:
+        net, egocentric = entry
+        if egocentric:
             # act() is only ever called on our turn, so the observation's
             # current_player field identifies us — no seat index needed.
             observation = egocentric_view(observation)
         obs_t = torch.as_tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
         mask_t = torch.as_tensor(action_mask, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
-            logits = self.net.actor_logits(obs_t)
+            logits = net.actor_logits(obs_t)
             neg = torch.tensor(-1e8, dtype=logits.dtype, device=self.device)
             masked = torch.where(mask_t > 0.5, logits, neg)
             return int(torch.argmax(masked, dim=1).item())

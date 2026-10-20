@@ -11,6 +11,32 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-20 — a 2p PPO baseline, and it is the strongest 2p agent
+
+The 2p track had no RL baseline: the trainer supported `--num_players 2`, but
+only the 3p checkpoint shipped. It now ships a 2p one too, and the claim that
+`Search` tops the 2p track no longer holds.
+
+* `training/checkpoints/ppo_baseline_2p.pt`: 5M steps of self-play with the
+  trainer's default settings and seed 42 (`--num_players 2 --device cpu`),
+  1.6 h on a CPU. Greedy, as an entrant under the 0.1 s rule: **67.5% vs
+  `Search` over 160 games (95% CI [0.60, 0.74])**, 80% vs `SearchLite`, 89% vs
+  `MCTS` (40 games each), and every game against every heuristic
+  (docs/BASELINES.md). training/README.md has the learning curve.
+* `PpoAgent` takes a list of checkpoints, one per track, and picks the network
+  by the observation's length. The registry's `PPO` baseline loads both, so it
+  now plays 2p as well: `baseline_names(2)` includes it, which adds it to
+  `tools/run_ladder.py`'s default 2p field and to `tools/play.py --vs all`.
+  `tools/course_ladder.py` keeps its explicit baseline list, without PPO.
+* `examples/ppo_entry/my_agent.py`: an entry built on the 2p checkpoint, in the
+  submission layout (copy the checkpoint next to it as `weights.pt`).
+* `tools/measure_baselines.py` measures PPO in 2p too, and no longer crashes
+  when it echoes its tables to a cp949 console (the file was written first).
+  Regenerating docs/BASELINES.md reproduced every earlier cell; the `Search1500`
+  row now has its full 8 games per cell (the earlier run's time cap cut some
+  cells to 4–6).
+* No engine, sandbox or ranking changes.
+
 ## 2026-10-20 — one weight file per entry, in both editions
 
 The public competition forbade all disk I/O, so a learned agent could ship its

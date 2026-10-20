@@ -30,7 +30,7 @@ from tournament.runner import run_tournament
 def make_pool():
     # A fresh factory per game keeps every match reproducible. The same pool
     # plays both tracks here; for the real competition each track has its own
-    # submissions. (PpoAgent is omitted: its bundled checkpoint is 3p-only.)
+    # submissions. (PpoAgent is omitted: it needs the optional torch extra.)
     return {
         "Random":        lambda: RandomAgent(),
         "ActionValue":   lambda: ActionValueAgent(),

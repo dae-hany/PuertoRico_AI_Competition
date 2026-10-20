@@ -132,11 +132,19 @@ Heuristics, adversarial search and reinforcement learning are all allowed, and
 they can be combined. Since this is a reinforcement learning course, a
 **learned component** (a value or policy network, self-play, a learned
 evaluation inside a search) is recommended, but other methods are **not
-penalized**, and no points are given for the name of an algorithm. The
-bundled PPO checkpoint is for the 3p track; 2p training is supported
-(`training/train_ppo.py --num_players 2`). See the "Recommended approach"
-section of the [README](../README.md) and
-[SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md).
+penalized**, and no points are given for the name of an algorithm.
+
+A trained 2p PPO checkpoint is bundled
+(`training/checkpoints/ppo_baseline_2p.pt`), and it is the strongest 2p
+baseline: it beats `Search` in about two games of three. Plain self-play with
+the trainer's default settings produced it in 1.6 h on a CPU
+([training/README.md](../training/README.md) has the numbers and the learning
+curve). [`examples/ppo_entry/`](../examples/ppo_entry/) is a complete entry
+built on it, in the submission layout (`my_agent.py` + `weights.pt`). You may
+start from it, but your write-up must say **what you changed and why, and how
+much it helped**: an entry that only resubmits the baseline has nothing to
+report. See also the "Recommended approach" section of the
+[README](../README.md) and [SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md).
 
 ## Schedule and ladder
 

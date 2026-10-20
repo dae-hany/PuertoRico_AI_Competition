@@ -22,8 +22,9 @@ if importlib.util.find_spec("torch") is not None:    # torch is an optional extr
     AGENT_FACTORIES.append(("PPO", PpoAgent))        # untrained, but must play legally
 
 
-# Every baseline except PPO plays both tracks; the bundled PPO checkpoint is
-# 293-dim, so it is 3p-only by construction.
+# Every baseline except PPO plays both tracks; an untrained PpoAgent() is a
+# 293-dim network, so it is 3p-only by construction (the per-track checkpoints
+# are covered by test_ppo_plays_both_tracks_with_one_checkpoint_each).
 TWO_PLAYER_FACTORIES = [(n, m) for n, m in AGENT_FACTORIES if n != "PPO"]
 
 
@@ -182,6 +183,47 @@ def test_ppo_checkpoint_carries_its_own_track():
             agent.act(wrong, mask)
 
 
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None,
+                    reason="PPO needs the optional torch extra")
+def test_ppo_plays_both_tracks_with_one_checkpoint_each():
+    """Given one checkpoint per track, PpoAgent picks the network that matches
+    the observation, which is how the registry's PPO baseline plays 2p and 3p."""
+    from agents.ppo_agent import PpoAgent, PpoNetwork
+
+    paths = [tmp_checkpoint(PpoNetwork(obs_dim=d), n) for n, d in ((2, 220), (3, 293))]
+    for seats in (2, 3):
+        agents = [PpoAgent(paths)] + [RandomAgent(seed=s) for s in range(1, seats)]
+        result = play_game(agents, seed=0, time_limit_s=5.0)
+        assert sum(result["illegal"]) == 0
+
+    with pytest.raises(ValueError, match="same track"):
+        PpoAgent([paths[0], paths[0]])
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None,
+                    reason="PPO needs the optional torch extra")
+def test_ppo_entry_example_loads_its_weight_file(tmp_path):
+    """examples/ppo_entry/my_agent.py reads weights.pt from its own folder, so a
+    copy of the folder anywhere plays, whatever the working directory."""
+    import os
+    import shutil
+
+    import torch
+
+    from agents.ppo_agent import PpoNetwork
+    from tournament.sandbox import load_agent_class
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    shutil.copy(os.path.join(root, "examples", "ppo_entry", "my_agent.py"), tmp_path)
+    torch.save({"model_state": PpoNetwork(obs_dim=220).state_dict(),
+                "args": {"egocentric": True, "num_players": 2}},
+               tmp_path / "weights.pt")
+
+    cls = load_agent_class(f"{tmp_path / 'my_agent.py'}:MyPpoAgent")
+    result = play_game([cls(), RandomAgent(seed=1)], seed=0, time_limit_s=5.0)
+    assert sum(result["illegal"]) == 0
+
+
 def tmp_checkpoint(net, num_players):
     import tempfile
 
@@ -206,3 +248,15 @@ def test_actionvalue_beats_random():
         if 0 in result["winners"]:
             wins += 1.0 / len(result["winners"])
     assert wins / n > 0.5        # a strong heuristic clearly beats random
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None,
+                    reason="PPO needs the optional torch extra")
+def test_registry_lists_ppo_for_each_bundled_checkpoint():
+    import os
+
+    from agents.registry import PPO_CHECKPOINTS, baseline_names
+
+    for num_players, path in PPO_CHECKPOINTS.items():
+        if os.path.exists(path):
+            assert "PPO" in baseline_names(num_players)

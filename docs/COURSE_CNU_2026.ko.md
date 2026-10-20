@@ -134,10 +134,20 @@ state = torch.load(os.path.join(HERE, "weights.pt"), map_location="cpu")
 됩니다. 강화학습 수업이므로 **학습 요소**(가치 네트워크나 정책 네트워크,
 self-play, 탐색 안에서 사용하는 학습한 가치 평가)를 넣기를 권장합니다. 다만
 다른 방법을 사용해도 **불이익은 없으며**, 알고리즘 이름에 따라 점수를 주지도
-않습니다. 함께 제공되는 PPO 체크포인트는 3p용입니다. 2인 학습 설정은
-지원하며, `training/train_ppo.py --num_players 2`로 수행할 수 있습니다.
-[README](../README.md)의 "Recommended approach" 절과
-[SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md)를 참고하세요.
+않습니다.
+
+학습을 마친 2p PPO 체크포인트(`training/checkpoints/ppo_baseline_2p.pt`)를
+함께 제공하며, 이 체크포인트는 2p에서 가장 강한 기준선입니다. `Search`를
+상대로 대략 세 판 중 두 판을 이깁니다. 이 체크포인트는 트레이너의 기본 설정으로
+self-play만 수행해서 얻은 결과이며, CPU로 1.6시간이 걸렸습니다. 측정 수치와
+학습 곡선은 [training/README.md](../training/README.md)에 정리되어 있습니다.
+[`examples/ppo_entry/`](../examples/ppo_entry/)에는 이 체크포인트를 사용하는
+완성된 엔트리가 제출 형식(`my_agent.py` + `weights.pt`) 그대로 들어 있습니다.
+이 엔트리에서 출발해도 되지만, 보고서에는 **무엇을 왜 바꿨는지, 그리고 그
+변경으로 성능이 얼마나 좋아졌는지**를 반드시 적어야 합니다. 기준선을 그대로
+다시 제출한 엔트리는 보고서에 적을 내용이 없습니다. [README](../README.md)의
+"Recommended approach" 절과 [SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md)도
+참고하세요.
 
 ## 일정과 중간 래더
 

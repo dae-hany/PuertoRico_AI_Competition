@@ -39,7 +39,7 @@ from agents.base import Agent
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent,
                     RandomAgent, ShippingRushAgent, TradeBuildingAgent)
 from agents.search_agent import SearchAgent, SearchLiteAgent
-from agents.registry import is_bundled_baseline
+from agents.registry import PPO_CHECKPOINTS, is_bundled_baseline
 from tournament.match import BASELINE_TIME_LIMIT_S, TIME_LIMIT_S
 from tournament.sandbox import load_agent_class
 try:                                      # PPO is optional (needs torch)
@@ -53,13 +53,13 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 MOVE_TIME_LIMIT = TIME_LIMIT_S              # 0.1 s per decision (competition rule)
 BASELINE_MOVE_TIME_LIMIT = BASELINE_TIME_LIMIT_S   # the bundled baselines' own budget
 SUBMISSIONS_DIR = os.path.join(ROOT, "submissions")
-PPO_CHECKPOINT = os.path.join(ROOT, "training", "checkpoints", "ppo_baseline.pt")
 GAME_RECORDS_DIR = os.path.join(ROOT, "results", "webui_games")
 
 # ── agent registry ───────────────────────────────────────────────────────────
 
 def _ppo():
-    return PpoAgent(PPO_CHECKPOINT if os.path.exists(PPO_CHECKPOINT) else None)
+    paths = [p for p in PPO_CHECKPOINTS.values() if os.path.exists(p)]
+    return PpoAgent(paths or None)       # one network per track it has weights for
 
 
 BASELINE_FACTORIES = {
@@ -73,7 +73,7 @@ BASELINE_FACTORIES = {
     "search":      (SearchAgent,                                      "Search (alpha-beta, strong & deterministic — 2p)"),
 }
 if PpoAgent is not None:                  # only offer PPO when torch is available
-    BASELINE_FACTORIES["ppo"] = (_ppo, "PPO (RL self-play, strong — 3p)")
+    BASELINE_FACTORIES["ppo"] = (_ppo, "PPO (RL self-play)")
 
 
 def discover_submissions():

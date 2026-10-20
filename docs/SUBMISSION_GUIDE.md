@@ -77,7 +77,7 @@ your win rate, VP margin, and per-move time against each opponent:
 
 ```bash
 python tools/play.py --agent my_agent.py:MyAgent                          # 2p, vs ActionValue and TradeBuilding
-python tools/play.py --agent my_agent.py:MyAgent --vs Search --games 20   # the 2p target to beat
+python tools/play.py --agent my_agent.py:MyAgent --vs PPO,Search --games 20   # the 2p targets to beat
 python tools/play.py --agent my_agent.py:MyAgent --players 3 --vs all     # 3p, every baseline
 python tools/play.py --agent my_agent.py:MyAgent --record                 # keep replays (tools/replay_game.py)
 ```
@@ -113,8 +113,9 @@ python tools/replay_game.py results/games/<file>.json --stop 40    # the positio
 
 **How strong are the baselines?** Measured numbers, per track, are in
 [BASELINES.md](BASELINES.md) — and the ordering is **not the same in both
-tracks**, so check the one you are entering. The targets to beat are
-`SearchAgent` in 2p and `PpoAgent` in 3p; among the heuristics, `TradeBuilding`
+tracks**, so check the one you are entering. The target to beat is `PpoAgent`
+in both tracks (in 2p it beats `SearchAgent` about two games in three, and
+`SearchAgent` is the next strongest); among the heuristics, `TradeBuilding`
 leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 
 ## 5. Going further
@@ -122,11 +123,14 @@ leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
 - **Planning (lookahead / MCTS):** override `on_game_start(self, forward_model)`,
   keep the `forward_model`, and call `forward_model.clone()` inside `act` to
   simulate actions safely. See [`agents/mcts_agent.py`](../agents/mcts_agent.py).
-- **Reinforcement learning:** a PPO self-play trainer and a (weak) starting
-  checkpoint are in [`training/`](../training/). Puerto Rico is hard for plain RL —
-  improving on it is an open problem. To ship what you trained, put **one weight
-  file** (at most 50 MB) next to your agent and load it from `__file__` once per
-  process: [The weight file](COMPETITION_RULES.md#the-weight-file).
+- **Reinforcement learning:** a PPO self-play trainer and one trained checkpoint
+  per track are in [`training/`](../training/); both are the strongest baseline
+  of their track, so they are a starting point to improve on (fine-tuning, a
+  search guided by the network, …). [`examples/ppo_entry/`](../examples/ppo_entry/)
+  is a complete 2p entry built on the 2p checkpoint. To ship what you trained,
+  put **one weight file** (at most 50 MB) next to your agent and load it from
+  `__file__` once per process:
+  [The weight file](COMPETITION_RULES.md#the-weight-file).
 
 ## 6. Rules you must respect
 

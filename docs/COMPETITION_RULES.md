@@ -113,8 +113,8 @@ class MyAgent(Agent):
   include the **baseline agents** bundled in this repo (Random, Factory,
   TradeBuilding, ShippingRush, ActionValue, MCTS, and in the 2p track also the
   alpha-beta baselines SearchLite and Search) plus the other submissions to
-  that track. The **PPO** baseline runs in the **3p track only** (its checkpoint
-  is 293-dim); the heuristics and MCTS play both tracks.
+  that track. The heuristics, MCTS and the **PPO** baseline play both tracks
+  (PPO has one checkpoint per track).
 - The runner is `tools/run_ladder.py`: it seats every entry in the official
   sandbox, plays the round-robin, and writes the standings and every game's
   replay. The same command produces the weekly ladder during the competition
