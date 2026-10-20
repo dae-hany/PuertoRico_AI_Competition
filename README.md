@@ -125,7 +125,10 @@ for both.
 
 A search agent's strength is only defined at a **stated compute budget**, so the
 budgets are quoted with the numbers; `SearchAgent`'s is a node count rather than
-a clock, so it plays the same move on any hardware.
+a clock, so it plays the same move on any hardware. The numbers hold under the
+**0.1 s rule**: it applies to entries, while the bundled baselines keep their own
+1 s budget, and none of them comes near it (`Search`'s slowest move measured
+≈ 0.4 s), so these are the opponents your entry meets.
 
 The heuristic baselines are player-count-agnostic, and so is `MctsAgent` (its
 Max^N value vectors are sized from the game it is handed). `SearchAgent` /

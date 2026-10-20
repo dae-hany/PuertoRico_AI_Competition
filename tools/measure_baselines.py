@@ -233,7 +233,11 @@ def main():
            "",
            f"Seat-balanced. Ties split the win. Planner budgets: "
            f"MCTS = {MCTS_SIMS} simulations / rollout depth {MCTS_ROLLOUT_DEPTH}, "
-           f"SearchLite = 250 nodes, Search = 1500 nodes.", ""]
+           f"SearchLite = 250 nodes, Search = 1500 nodes. These budgets, not a "
+           f"clock, set the strength (this run allows 120 s per move). Under the "
+           f"official rules an entry gets 0.1 s per decision while the bundled "
+           f"baselines keep their own 1 s, which every baseline move fits, so "
+           f"these are the opponents an entry meets.", ""]
     for n_seats in (2, 3):
         label = "2p (1-vs-1)" if n_seats == 2 else "3p"
         out += [f"## {label} — heuristic round-robin "
