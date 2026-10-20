@@ -7,8 +7,7 @@ They are also the technical rules of the **course edition** currently running â€
 the 2p track as the final project of the Reinforcement Learning course at
 Chonnam National University. That edition changes a few things on top (it is 2p
 only, ranks by wins and rank in games between students rather than by Elo,
-allows one weight file, and takes a code zip and a separate report and
-presentation zip): see
+and takes a code zip and a separate report and presentation zip): see
 **[COURSE_CNU_2026.md](COURSE_CNU_2026.md)**, which takes precedence for
 students of that course. Everything not listed there is governed by this page.
 
@@ -48,6 +47,9 @@ class MyAgent(Agent):
 - You may optionally override `on_game_start(self, forward_model=None)`. It is
   called **once at the start of each game**. Planning agents keep the
   `forward_model` for simulation; reactive agents can ignore it.
+- A learned agent may ship **one weight file** next to its `.py` file (see
+  [The weight file](#the-weight-file) below). An entry is therefore the agent
+  file, plus at most one weight file.
 - Start from `submission_template/` and read `docs/SUBMISSION_GUIDE.md`.
 
 ## Inputs
@@ -141,7 +143,8 @@ class MyAgent(Agent):
   - access the network,
   - read or import other entrants' code,
   - spawn processes,
-  - read or write files, or do any other disk or network I/O, or
+  - write files, read any file other than its own weight file (below), or do
+    any other disk or network I/O, or
   - tamper with the environment, the engine, or other agents.
 - The `forward_model` provided to planning agents is for **read-only
   simulation** â€” **clone it, never mutate the live game**. Using it to corrupt
@@ -149,6 +152,50 @@ class MyAgent(Agent):
   This is **checked, not assumed**: in-process the harness compares the real
   game state before and after every one of your moves and records a breach; in
   the official run your process cannot reach the real game at all.
+
+### The weight file
+
+A learned agent needs its trained parameters, so an entry may include **one
+read-only weight file** (e.g. `weights.pt` or `weights.npz`) besides its `.py`
+file. The rule:
+
+- **At most one file**, placed **next to the agent file** (the same folder, not
+  a subfolder), and **at most 50 MB**.
+- Locate it **relative to your own file**, from `__file__`, never relative to
+  the working directory: the official run starts in another folder.
+- Read it **only at import or while the agent is constructed**, never inside
+  `act`. The harness builds a **new agent instance every game**, so keep the
+  loaded parameters in a **module-level cache** and read the file once per
+  process:
+
+  ```python
+  import os
+  import torch
+
+  HERE = os.path.dirname(os.path.abspath(__file__))
+  _NET = None
+
+  def _net():
+      global _NET
+      if _NET is None:
+          _NET = torch.load(os.path.join(HERE, "weights.pt"), map_location="cpu")
+      return _NET
+
+  class MyAgent(Agent):
+      def __init__(self):
+          super().__init__()
+          self.net = _net()
+  ```
+
+- **Nothing else**: no second file, no files elsewhere on disk, and no writing,
+  not even next to your agent.
+- Loading counts toward the worker's start-up, not toward any move, but a
+  worker that is killed after a timeout pays it again (the sandbox allows 30 s
+  to start). `tools/validate_submission.py` checks all of the above and reports
+  the file's size and the worker's start-up time.
+
+Embedding the parameters in the `.py` source (an array literal, or base64 read
+through `io.BytesIO`) is still allowed and needs no weight file.
 
 ## Hidden information
 

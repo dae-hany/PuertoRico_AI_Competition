@@ -81,6 +81,156 @@ def test_validate_fails_bad_submissions(tmp_path):
     assert "[FAIL] imports" in r.stdout and "subprocess" in r.stdout
 
 
+
+# -- the weight-file rule ------------------------------------------------------
+
+WEIGHT_AGENT = """import os
+import numpy as np
+from agents.base import Agent
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+_CACHE = {}
+
+
+def _weights():
+    if "w" not in _CACHE:
+        _CACHE["w"] = np.load(os.path.join(HERE, "weights.npy"))
+    return _CACHE["w"]
+
+
+class WeightAgent(Agent):
+    name = "WeightAgent"
+
+    def __init__(self):
+        super().__init__()
+        self.w = _weights()
+
+    def act(self, observation, action_mask):
+        return int(np.argmax(np.where(action_mask > 0.5, self.w, -np.inf)))
+
+
+if __name__ == "__main__":          # training code: never runs in the official run
+    np.save(os.path.join(HERE, "weights.npy"), np.random.rand(200))
+"""
+
+
+def _validator():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "validate_submission", os.path.join(ROOT, "tools", "validate_submission.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_validate_accepts_one_weight_file_next_to_the_agent(tmp_path):
+    """Loaded from __file__, the file is found from any working directory and in
+    the sandbox worker, and the training code under __main__ is not held against it."""
+    import numpy as np
+    entry = tmp_path / "entry"
+    entry.mkdir()
+    (entry / "weight_agent.py").write_text(WEIGHT_AGENT, encoding="utf-8")
+    np.save(entry / "weights.npy", np.random.default_rng(0).random(200))
+    r = run("tools/validate_submission.py", str(entry / "weight_agent.py"),
+            "--track", "2p", "--games", "1")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "[PASS] weight file: weights.npy" in r.stdout, r.stdout
+    assert "[WARN] file access" not in r.stdout and "[FAIL]" not in r.stdout, r.stdout
+    assert "worker start" in r.stdout
+
+
+def test_validate_fails_a_weight_file_opened_from_the_working_directory(tmp_path):
+    """It works on the entrant's machine when run from the agent's folder, and
+    nowhere else: the official run starts in another folder."""
+    import numpy as np
+    src = WEIGHT_AGENT.replace('os.path.join(HERE, "weights.npy")', '"weights.npy"', 1)
+    (tmp_path / "weight_agent.py").write_text(src, encoding="utf-8")
+    np.save(tmp_path / "weights.npy", np.zeros(200))
+    env = dict(os.environ, PYTHONPATH=ROOT)
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "validate_submission.py"),
+                        "weight_agent.py", "--track", "2p", "--games", "1"],
+                       cwd=tmp_path, capture_output=True, text=True, timeout=600, env=env)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "[FAIL] file access: opens weights.npy relative to the working directory" in r.stdout
+    assert "[WARN] file access" in r.stdout and "not built from __file__" in r.stdout
+
+
+def test_files_opened_while_loading_are_held_to_the_rule(tmp_path):
+    agent = tmp_path / "a.py"
+    agent.write_text("", encoding="utf-8")
+    one, two = tmp_path / "w1.npz", tmp_path / "w2.npz"
+    one.write_bytes(b"x" * 2000)
+    two.write_bytes(b"x")
+    (tmp_path / "sub").mkdir()
+    nested = tmp_path / "sub" / "w.pt"
+    nested.write_bytes(b"x")
+
+    venv = tmp_path / ".venv" / "site-packages"
+
+    def statuses(opens, cap=None):
+        mod = _validator()
+        mod._library_dirs = lambda: [os.path.normcase(str(venv))]
+        if cap is not None:
+            mod.WEIGHT_FILE_MAX_MB = cap
+        report = mod.Report()
+        mod.check_files_opened(opens, str(agent), report)
+        return [(s, t) for s, t, _ in report.rows], report.rows
+
+    ok, _ = statuses([(str(one), "rb", 0), (str(agent), "r", 0),
+                      (str(tmp_path / "__pycache__" / "a.cpython.pyc"), "rb", 0),
+                      (str(venv / "torch" / "version.json"), "rb", 0)])   # a venv beside it
+    assert ok == [("PASS", "weight file")]
+
+    _, rows = statuses([(str(one), "rb", 0), (str(two), "rb", 0)])
+    assert any(s == "FAIL" and "at most one" in d for s, _, d in rows), rows
+
+    _, rows = statuses([(str(one), "rb", 0)], cap=0.001)
+    assert any(s == "FAIL" and "the cap is" in d for s, _, d in rows), rows
+
+    for opens, why in [([(str(nested), "rb", 0)], "next to your agent"),
+                       ([(str(tmp_path / "log.txt"), "w", 0)], "writing files"),
+                       ([("w1.npz", "rb", 0)], "relative to the working directory")]:
+        _, rows = statuses(opens)
+        assert any(s == "FAIL" and why in d for s, _, d in rows), (why, rows)
+
+
+def test_source_scan_tells_load_time_reads_from_the_rest():
+    import ast
+    import textwrap
+
+    def scan(src):
+        mod = _validator()
+        report = mod.Report()
+        mod.scan_file_calls(ast.parse(textwrap.dedent(src)), report)
+        return " ".join(d for _, _, d in report.rows)
+
+    assert scan("""
+        import io, os, torch
+        HERE = os.path.dirname(__file__)
+        W = os.path.join(HERE, "w.pt")
+        def _load(path):
+            return torch.load(path)
+        NET = _load(W)
+        with open(os.path.join(HERE, "meta.json")) as f:
+            META = f.read()
+        BLOB = torch.load(io.BytesIO(b""))
+        buf = io.BytesIO()
+        torch.save(NET, buf)
+        if __name__ == "__main__":
+            torch.save(NET, "w.pt")
+        """) == ""
+    assert "writing files" in scan("import numpy as np\nnp.save('x.npy', 0)\n")
+    assert "writing files" in scan("f = open('log.txt', 'a')\n")
+    assert "in act()" in scan("""
+        import os, numpy as np
+        HERE = os.path.dirname(__file__)
+        class A:
+            def act(self, observation, action_mask):
+                return np.load(os.path.join(HERE, "w.npy"))
+        """)
+    assert "not built from __file__" in scan("import numpy as np\nW = np.load('w.npy')\n")
+
+
 def test_ladder_writes_boards_and_replays(tmp_path):
     entries = tmp_path / "entries"
     entries.mkdir()

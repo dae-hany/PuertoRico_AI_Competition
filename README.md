@@ -177,15 +177,16 @@ tests/              pytest suite
 
 ## The competition
 
-- **Format.** Two tracks, 2p and 3p, one agent file per track, **0.1 s per
+- **Format.** Two tracks, 2p and 3p, one agent file per track (plus at most
+  one weight file of up to 50 MB for a learned agent), **0.1 s per
   decision**. Each track is a seat-balanced round-robin of every entry against
   every other entry and the bundled baselines, ranked by Elo (2p) or TrueSkill
   (3p); the rules are in [docs/COMPETITION_RULES.md](docs/COMPETITION_RULES.md).
 - **Running now: the course edition.** The 2p track is the final project of the
   Reinforcement Learning course at Chonnam National University (autumn 2026).
-  Its extra rules — ranking by wins and rank in games between students, one
-  weight file, a code zip and a separate report and presentation zip, and four
-  ladder rounds that publish only wins and rank — are
+  Its extra rules — ranking by wins and rank in games between students, a code
+  zip and a separate report and presentation zip, and four ladder rounds that
+  publish only wins and rank — are
   in [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
   for students of that course.
 - **Window.** The competition runs for about three months. The dates of the

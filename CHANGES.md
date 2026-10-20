@@ -11,6 +11,34 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-20 — one weight file per entry, in both editions
+
+The public competition forbade all disk I/O, so a learned agent could ship its
+parameters only inside its `.py` source. It now follows the CNU course's rule,
+with a size cap that applies to the course too (docs/COMPETITION_RULES.md,
+*The weight file*):
+
+* An entry is the agent `.py` plus **at most one read-only weight file**, next
+  to it, **at most 50 MB**, located from `__file__` and read at import or in the
+  constructor. Writing files and every other disk or network access stay
+  forbidden. Since the harness builds a new agent every game, the docs
+  recommend a module-level cache.
+* `tools/validate_submission.py` no longer warns on every call named
+  `open`/`load`/`save`. It watches the files the agent opens while it is
+  imported and constructed (an audit hook) and **fails** an entry that reads a
+  second file, a file outside its folder, a path relative to the working
+  directory or a file over `WEIGHT_FILE_MAX_MB`, or that writes one; it
+  reports the weight file's size as a PASS. A source scan still **warns** on
+  writes anywhere, reads inside `act`, and reads whose path is not built from
+  `__file__`, skipping in-memory buffers and code under
+  `if __name__ == "__main__":`. Each track's summary also gives the worker's
+  start-up time.
+* The course's weight-file exception becomes the shared rule. **New for the
+  course: the 50 MB cap**, and since `tools/course_ladder.py` leaves out an
+  entry with a FAIL, a larger file now keeps an entry out of a ladder round.
+* No engine, sandbox or ranking changes: the sandbox worker already reads its
+  entry's folder (now covered by a test).
+
 ## 2026-10-19 — 0.1 s per decision for every entrant, both tracks
 
 The public competition now uses the course's limit: **0.1 s per decision**

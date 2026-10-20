@@ -17,8 +17,7 @@ public IEEE CoG edition follow COMPETITION_RULES.md alone.)
 |---|---|---|
 | Track | **2p only** | 2p and 3p |
 | Ranking | **wins and rank** in games between students (a draw is ½ a win) | Elo (2p) / TrueSkill (3p) |
-| Weight file | **one file allowed** (`weights.pt`) | no disk I/O |
-| Deliverables | **two zips**: code (agent + README + optional weights), then write-up + presentation | agent file |
+| Deliverables | **two zips**: code (agent + README + optional weights), then write-up + presentation | agent file (+ optional weight file) |
 | Ladder | **4 rounds** before the deadline; wins and rank only | weekly; standings and replays |
 | Channel | **Chonnam National University LMS** assignment submission page | to be announced |
 
@@ -54,7 +53,7 @@ One zip named **`<student id>_<name>.zip`**, containing:
 |---|---|
 | `my_agent.py` | exactly **one** `Agent` subclass, for the 2p track. It must be self-contained: do not import helper modules of your own, because the harness loads this single file directly. |
 | `README.md` | how to run it, what it depends on, and whether it uses a weight file |
-| `weights.pt` (optional) | one weight file, if your agent uses a learned model (see below) |
+| `weights.pt` (optional) | one weight file of at most 50 MB, if your agent uses a learned model (see below) |
 
 ### ② Report and presentation — Monday 30 November 2026, 23:59
 
@@ -97,19 +96,22 @@ name; the ladder refuses to run until such a clash is fixed.
 other entrants' code, changing the real game state, and reading the hidden
 plantation tile order.
 
-**Allowed:** reading **one weight file** (the course exception below), and the
+**Allowed:** reading **one weight file** (below), and the
 Python standard library, NumPy, PyTorch and this repository's modules.
 
 The bundled `Search` (1500 nodes) and `MCTS` examples take more than 0.1 s per
 decision; if you build on them, reduce the node or simulation count. (As bundled
 baselines they keep their own 1 s budget; an entry built on their code does not.)
 
-### The weight file (course exception)
+### The weight file
 
-COMPETITION_RULES.md forbids disk I/O. **The course allows exactly one weight
-file** so that a learned agent can ship its parameters. Put it in the zip next
-to your agent and load it **relative to your own file**, never relative to the
-working directory:
+The course follows the public rule
+([COMPETITION_RULES.md, The weight file](COMPETITION_RULES.md#the-weight-file)),
+which since 20 October 2026 is the rule the course already had, plus a size
+cap: **exactly one weight file, at most 50 MB**, so that a learned agent can
+ship its parameters. Put it in the zip next to your agent and load it
+**relative to your own file**, never relative to the working directory, at
+import or in the constructor (not in `act`):
 
 ```python
 import os
@@ -117,8 +119,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 state = torch.load(os.path.join(HERE, "weights.pt"), map_location="cpu")
 ```
 
-`tools/validate_submission.py` prints a **WARN** about file access for such an
-agent. In the course that WARN is expected; a **FAIL** is not.
+A new agent is built for every game, so load the file once into a module-level
+variable and reuse it (the example in COMPETITION_RULES.md shows how).
+`tools/validate_submission.py` reports such a file as **`[PASS] weight file`**
+with its size. A file over 50 MB, a second file, a path relative to the working
+directory, or writing a file is a **FAIL**, and an entry with a FAIL is left
+out of that ladder round.
 
 ## Anything goes, but learning is recommended
 

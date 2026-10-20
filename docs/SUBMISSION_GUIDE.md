@@ -5,9 +5,9 @@ it. You only need to write one method: `act`.
 
 > Taking the Chonnam National University **Reinforcement Learning** course? The
 > 2p track is your final project, and it changes a few rules in this guide
-> (the code zip and the separate report zip, the weight
-> file, ranking by wins and rank, the four ladder rounds, submission through
-> the LMS): [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
+> (the code zip and the separate report zip, ranking by wins and rank, the
+> four ladder rounds, submission through the LMS):
+> [COURSE_CNU_2026.md](COURSE_CNU_2026.md).
 
 The competition has **two tracks** — **2p** (1‑vs‑1) and **3p** (3‑player) — and
 each is a **separate submission**. You can enter one or both, with a different
@@ -124,7 +124,9 @@ leads 1‑vs‑1 and `ShippingRush` leads 3‑player.
   simulate actions safely. See [`agents/mcts_agent.py`](../agents/mcts_agent.py).
 - **Reinforcement learning:** a PPO self-play trainer and a (weak) starting
   checkpoint are in [`training/`](../training/). Puerto Rico is hard for plain RL —
-  improving on it is an open problem.
+  improving on it is an open problem. To ship what you trained, put **one weight
+  file** (at most 50 MB) next to your agent and load it from `__file__` once per
+  process: [The weight file](COMPETITION_RULES.md#the-weight-file).
 
 ## 6. Rules you must respect
 
@@ -149,12 +151,22 @@ status 0) when nothing failed. Fix every FAIL; read every WARN.
 
 Submit your single agent file (the one class) **per track you are entering** —
 the 2p track, the 3p track, or both (the same file is fine if your agent handles
-both observation lengths). Make sure it:
+both observation lengths), plus **at most one weight file** if your agent
+uses learned parameters. Make sure it:
 
 - imports only from the standard library, NumPy, PyTorch, and this repo;
-- is self-contained and runs without network or file access;
+- is self-contained and runs without network access;
+- reads no file except its own weight file, writes none, and loads that file
+  from `__file__`, at import or in the constructor (the rule and an example:
+  [The weight file](COMPETITION_RULES.md#the-weight-file));
+- keeps the weight file next to the agent file and at most 50 MB;
 - sets a distinctive `name` (shown on the leaderboard);
 - states which track(s) it is for.
+
+The validator watches what your agent opens while it is imported and built:
+a weight file read from `__file__` shows up as `[PASS] weight file` with its
+size, and a file opened relative to the working directory, a second file, a
+file over 50 MB, or a write is a FAIL.
 
 Where and when to submit is announced in the README's *The competition*
 section. (CNU course students submit a zip through the LMS instead, and the

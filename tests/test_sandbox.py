@@ -169,6 +169,31 @@ def test_hidden_draw_order_never_enters_the_worker(sandboxed):
 
 # ── plumbing ─────────────────────────────────────────────────────────────────
 
+def test_entry_reads_its_weight_file_from_its_own_folder(tmp_path, monkeypatch):
+    """The rules allow one weight file next to the agent, located from
+    ``__file__``. The worker does not start in the entry's folder (it inherits
+    the organizer's working directory) and must still find it."""
+    monkeypatch.chdir(tmp_path)
+    entry = tmp_path / "entry"
+    entry.mkdir()
+    np.save(entry / "weights.npy", np.arange(200, dtype=np.float64))
+    (entry / "weight_agent.py").write_text(
+        "import os\nimport numpy as np\nfrom agents.base import Agent\n"
+        "W = np.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'weights.npy'))\n"
+        "class WeightAgent(Agent):\n"
+        "    name = 'WeightAgent'\n"
+        "    def act(self, observation, action_mask):\n"
+        "        return int(np.argmax(np.where(action_mask > 0.5, W, -np.inf)))\n",
+        encoding="utf-8")
+    agent = SandboxedAgent(f"{entry / 'weight_agent.py'}:WeightAgent", time_limit_s=1.0)
+    try:
+        _, obs, mask = _one_move(agent)
+        legal = np.where(mask > 0.5)[0]
+        assert agent.act(obs, mask) == int(legal.max())
+    finally:
+        agent.close()
+
+
 def test_loader_rejects_things_that_are_not_agents():
     with pytest.raises(ValueError):
         load_agent_class("no_colon_here")
