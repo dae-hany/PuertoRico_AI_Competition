@@ -1,5 +1,7 @@
 # Course edition — Chonnam National University, Reinforcement Learning (2026)
 
+> **English** | [한국어](COURSE_CNU_2026.ko.md)
+
 The 2p track is the **final project** of the Reinforcement Learning course in
 the Department of Artificial Intelligence, Chonnam National University, in the
 2026 autumn semester. It is an **individual** assignment. This page holds

@@ -18,7 +18,8 @@ rules, engine, and action space are otherwise shared.
 
 The competition **running now** is the final project of the **Reinforcement
 Learning** course at **Chonnam National University** (2p track, autumn 2026) —
-see [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md) if you are taking it. A
+see [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md) if you are taking it
+([한국어](docs/COURSE_CNU_2026.ko.md)). A
 public **IEEE CoG 2027** edition is planned on the same engine and the same
 technical rules; its dates will be announced here. Everything — the
 engine, the agents, the docs — is in English so anyone can take part. The engine
