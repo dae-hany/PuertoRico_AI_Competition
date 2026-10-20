@@ -27,7 +27,10 @@ only the 3p checkpoint shipped. It now ships a 2p one too, and the claim that
   by the observation's length. The registry's `PPO` baseline loads both, so it
   now plays 2p as well: `baseline_names(2)` includes it, which adds it to
   `tools/run_ladder.py`'s default 2p field and to `tools/play.py --vs all`.
-  `tools/course_ladder.py` keeps its explicit baseline list, without PPO.
+  `tools/course_ladder.py` keeps an explicit baseline list, and PPO is added
+  to it as an anchor, so students see where they stand against the strongest
+  2p baseline (a reference column only; the grade still counts student games
+  alone).
 * `examples/ppo_entry/my_agent.py`: an entry built on the 2p checkpoint, in the
   submission layout (copy the checkpoint next to it as `weights.pt`).
 * `tools/measure_baselines.py` measures PPO in 2p too, and no longer crashes

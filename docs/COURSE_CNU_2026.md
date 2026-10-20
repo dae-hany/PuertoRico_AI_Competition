@@ -36,7 +36,10 @@ The final project's 40% splits in two:
 - Only **games between students** count. Each game is a win (1), a draw (½)
   or a loss (0); your **wins** are your wins plus half your draws.
 - The bundled baselines are played too, and their results are published
-  **separately, for reference only**.
+  **separately, for reference only**: Random, Factory, ShippingRush,
+  TradeBuilding, ActionValue, SearchLite and PPO (the strongest of them, see
+  [below](#anything-goes-but-learning-is-recommended)), so you can see where
+  your agent stands.
 - How the wins and the rank are turned into points will be **announced later**.
 - There is **no bonus or penalty** for using, or not using, reinforcement
   learning.

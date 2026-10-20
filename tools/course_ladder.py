@@ -91,7 +91,9 @@ from tournament.rankers.win_rate import wilson_ci               # noqa: E402
 
 N_SEATS = 2                                   # this tool is the 1-vs-1 track
 FILENAME_RE = re.compile(r"^(?P<sid>[0-9]{4,12})_(?P<name>.+)$")
-DEFAULT_BASELINES = "random,factory,shippingrush,tradebuilding,actionvalue,searchlite"
+# Anchors, so students can place themselves; PPO is the strongest 2p one (it is
+# dropped with a note when torch is missing). Search is left out: it is slow.
+DEFAULT_BASELINES = "random,factory,shippingrush,tradebuilding,actionvalue,searchlite,ppo"
 DEFAULT_SEEDS = "1-25"                        # the course's public ladder seeds
 DEFAULT_TIME_LIMIT = TIME_LIMIT_S             # 0.1 s per decision, as in the competition
 
