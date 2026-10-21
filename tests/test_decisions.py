@@ -6,14 +6,18 @@ The model and these tests follow the research engine this repo shares an
 ancestor with (PuertoRico_ESWA, rule/CONFORMANCE.md §2, where the rules are
 numbered E1-E11).
 """
+import copy
+import pickle
 import random
 
 import numpy as np
 import pytest
 
-from puerto_rico.constants import BuildingType, Good, Phase
+from puerto_rico import flatten_observation
+from puerto_rico.constants import Benefit, BuildingType, Good, Phase, Role, TileType
 from puerto_rico.engine import PuertoRicoGame
-from puerto_rico.env import PuertoRicoEnv
+from puerto_rico.env import ACCEPT_BENEFIT, DECLINE_BENEFIT, PuertoRicoEnv
+from puerto_rico.observation import PENDING_BENEFIT_OFFSET
 
 
 def _game(n=3, seed=0):
@@ -25,6 +29,254 @@ def _game(n=3, seed=0):
 def _occupy(p, b_type, colonists=1):
     p.build_building(b_type)
     next(b for b in p.city_board if b.building_type == b_type).colonists = colonists
+
+
+# ── optional benefits are accept/decline decisions ──────────────────────────
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_mayor_privilege_is_offered_before_distribution(accept):
+    """Mayor: "The player who chooses this role may first take one colonist from
+    the colonist supply (not from the colonist ship!) as the privilege."
+    """
+    g = _game()
+    mayor = g.current_player_idx
+    supply, ship = g.colonists_supply, g.colonists_ship
+    g.select_role(mayor, Role.MAYOR)
+    assert g.pending_benefits == [Benefit.MAYOR_PRIVILEGE]
+    assert all(p.unplaced_colonists == 0 for p in g.players), "distribution waits for the decision"
+
+    g.resolve_benefit(mayor, accept=accept)
+    assert g.colonists_supply == supply - (1 if accept else 0)
+    assert g.colonists_ship == 0
+    shares = [g.players[(mayor + k) % 3].unplaced_colonists for k in range(3)]
+    assert shares == [ship // 3 + (1 if accept else 0), ship // 3, ship // 3]
+
+
+def test_mayor_privilege_is_not_offered_from_an_empty_supply():
+    """Mayor: "When the colonist supply runs out, the mayor may not use this
+    privilege"."""
+    g = _game()
+    g.colonists_supply = 0
+    mayor = g.current_player_idx
+    g.select_role(mayor, Role.MAYOR)
+    assert not g.pending_benefits
+    assert g.players[mayor].unplaced_colonists == 1
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_hospice_colonist_is_optional(accept):
+    """Hospice: "they may take a colonist from the colonist supply and place it on
+    the newly acquired plantation or quarry tile."
+    """
+    g = _game()
+    p = g.players[0]
+    _occupy(p, BuildingType.HOSPICE)
+    g.face_up_plantations = [TileType.SUGAR_PLANTATION]
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 1
+    supply = g.colonists_supply
+
+    g.action_settler(0, tile_choice=0)
+    assert g.pending_benefits == [Benefit.HOSPICE]
+    assert g.current_player_idx == 0, "the turn waits for the decision"
+    g.resolve_benefit(0, accept=accept)
+    assert p.island_board[-1].is_occupied is accept
+    assert g.colonists_supply == supply - (1 if accept else 0)
+    assert g.current_player_idx == 1
+
+
+def test_hospice_does_not_apply_to_the_hacienda_tile():
+    """Hospice: "players who also own an occupied hacienda and choose to take the
+    additional facedown or quarry tile do not get a colonist for the extra tile."
+    """
+    g = _game()
+    p = g.players[0]
+    _occupy(p, BuildingType.HOSPICE)
+    _occupy(p, BuildingType.HACIENDA)
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 1
+    g.action_hacienda_draw(0)
+    assert not g.pending_benefits
+    assert not p.island_board[-1].is_occupied
+
+
+def test_hospice_and_university_fall_back_to_the_colonist_ship():
+    """Hospice, University: "If there are no more colonists in the colonist
+    supply, the player may take one from the colonist ship. If there are also
+    none there, the player takes none."
+    """
+    g = _game()
+    p = g.players[0]
+    _occupy(p, BuildingType.HOSPICE)
+    g.face_up_plantations = [TileType.CORN_PLANTATION, TileType.CORN_PLANTATION]
+    g.colonists_supply, g.colonists_ship = 0, 3
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 1
+    g.action_settler(0, tile_choice=0)
+    g.resolve_benefit(0, accept=True)
+    assert p.island_board[-1].is_occupied and g.colonists_ship == 2
+
+    g.colonists_ship = 0                      # nothing anywhere: nothing offered
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 1
+    g.action_settler(0, tile_choice=0)
+    assert not g.pending_benefits and not p.island_board[-1].is_occupied
+
+    g = _game()
+    p = g.players[0]
+    p.doubloons = 10
+    _occupy(p, BuildingType.UNIVERSITY)
+    g.colonists_supply, g.colonists_ship = 0, 3
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.BUILDER, 0, 1
+    g.action_builder(0, BuildingType.SMALL_MARKET)
+    g.resolve_benefit(0, accept=True)
+    market = next(b for b in p.city_board if b.building_type == BuildingType.SMALL_MARKET)
+    assert market.colonists == 1 and g.colonists_ship == 2
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_university_colonist_is_optional(accept):
+    """University: "they may take a colonist from the colonist supply and place it
+    on the newly acquired tile."
+    """
+    g = _game()
+    p = g.players[0]
+    p.doubloons = 10
+    _occupy(p, BuildingType.UNIVERSITY)
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.BUILDER, 0, 1
+    supply = g.colonists_supply
+
+    g.action_builder(0, BuildingType.SMALL_MARKET)
+    assert g.pending_benefits == [Benefit.UNIVERSITY]
+    g.resolve_benefit(0, accept=accept)
+    market = next(b for b in p.city_board if b.building_type == BuildingType.SMALL_MARKET)
+    assert market.colonists == (1 if accept else 0)
+    assert g.colonists_supply == supply - (1 if accept else 0)
+    assert g.current_player_idx == 1
+
+
+def test_a_university_built_now_offers_nothing():
+    g = _game()
+    p = g.players[0]
+    p.doubloons = 10
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.BUILDER, 0, 1
+    g.action_builder(0, BuildingType.UNIVERSITY)
+    assert not g.pending_benefits
+
+
+@pytest.mark.parametrize("accept", [True, False])
+def test_captain_privilege_belongs_to_the_first_load(accept):
+    """Captain: "When loading the first kind of goods, the captain takes as the
+    privilege 1 extra VP. The captain does not get this extra VP for the goods
+    loaded in subsequent turns". Optional, as every privilege is ("they may
+    choose not to use the action or privilege of the placard chosen"); a
+    declined privilege is used up."""
+    g = _game()
+    _captain_phase(g, 0)
+    cap = g.players[0]
+    cap.goods[Good.CORN] = 2
+    cap.goods[Good.SUGAR] = 1
+    vp_supply = g.vp_chips
+
+    g.action_captain_load(0, 0, Good.CORN)
+    assert g.pending_benefits == [Benefit.CAPTAIN_PRIVILEGE]
+    g.resolve_benefit(0, accept=accept)
+    assert cap.vp_chips == 2 + (1 if accept else 0)
+
+    # Others cannot load; the captain loads again without a second privilege.
+    for _ in range(2):
+        g.action_captain_pass(g.current_player_idx)
+    g.action_captain_load(0, 1, Good.SUGAR)
+    assert not g.pending_benefits
+    assert cap.vp_chips == 3 + (1 if accept else 0)
+    assert g.vp_chips == vp_supply - cap.vp_chips
+
+
+def test_captain_privilege_comes_before_the_harbor():
+    """Harbor: "Each time ... owners of an occupied harbor load goods on a cargo
+    ship, they earn one extra VP"; beige functions are optional ("Players are not
+    required to use the special function of an occupied beige building")."""
+    g = _game()
+    _captain_phase(g, 0)
+    cap = g.players[0]
+    _occupy(cap, BuildingType.HARBOR)
+    cap.goods[Good.CORN] = 1
+    g.action_captain_load(0, 0, Good.CORN)
+    assert g.pending_benefits == [Benefit.CAPTAIN_PRIVILEGE, Benefit.HARBOR]
+    g.resolve_benefit(0, accept=False)
+    assert g.pending_benefits == [Benefit.HARBOR]
+    g.resolve_benefit(0, accept=True)
+    assert cap.vp_chips == 2
+    assert g.current_player_idx == 1
+
+
+def test_benefit_decision_admits_only_accept_and_decline():
+    env = PuertoRicoEnv(num_players=3)
+    env.reset(seed=0)
+    mayor = env.game.current_player_idx
+    env.step(Role.MAYOR)
+    obs = env.observe(env.agent_selection)
+    assert env.agent_selection == f"player_{mayor}"
+    assert np.flatnonzero(obs["action_mask"]).tolist() == [ACCEPT_BENEFIT, DECLINE_BENEFIT]
+    pending = obs["observation"]["global_state"]["pending_benefit"]
+    assert pending.tolist() == [1.0, 0.0, 0.0, 0.0, 0.0]
+    flat = flatten_observation(obs["observation"])
+    assert flat[PENDING_BENEFIT_OFFSET:PENDING_BENEFIT_OFFSET + 5].tolist() == pending.tolist()
+    with pytest.raises(ValueError):
+        env.step(120 + TileType.INDIGO_PLANTATION)
+    with pytest.raises(ValueError):
+        env.game.action_mayor_place_colonist(mayor, is_city=False, slot_idx=0)
+    env.step(DECLINE_BENEFIT)
+    assert not env.game.pending_benefits
+    assert not env.observe(env.agent_selection)["observation"]["global_state"]["pending_benefit"].any()
+
+
+def _pending_hospice_game():
+    g = _game()
+    p = g.players[0]
+    _occupy(p, BuildingType.HOSPICE)
+    g.face_up_plantations = [TileType.CORN_PLANTATION]
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 1
+    g.action_settler(0, tile_choice=0)
+    assert g.pending_benefits == [Benefit.HOSPICE]
+    return g
+
+
+@pytest.mark.parametrize("how", ["deepcopy", "pickle"])
+def test_a_copy_resolves_its_pending_benefit_on_its_own_board(how):
+    """The colonist's target is kept as a board position, not an object: the
+    hand-rolled __deepcopy__ rebuilds the boards, so an object reference would
+    have pointed outside the copy and the colonist would have gone nowhere."""
+    g = _pending_hospice_game()
+    clone = copy.deepcopy(g) if how == "deepcopy" else pickle.loads(pickle.dumps(g))
+    clone.resolve_benefit(0, accept=True)
+    assert clone.players[0].island_board[-1].is_occupied
+    assert not g.players[0].island_board[-1].is_occupied
+    assert g.pending_benefits == [Benefit.HOSPICE]
+
+
+def test_forward_model_clones_resolve_benefits_like_the_real_game():
+    """Search clones the env at benefit decisions (hospice and university
+    included): the clone must play on exactly as the real game would."""
+    from puerto_rico import ForwardModel, make_env
+
+    seen = set()
+    for seed in range(40):
+        env = make_env(seed=seed, num_players=3)
+        fm = ForwardModel(env)
+        rng = random.Random(seed)
+        while not fm.is_terminal():
+            game = env.unwrapped.game
+            if game.pending_benefits and game.pending_benefits[0] in (Benefit.HOSPICE,
+                                                                      Benefit.UNIVERSITY):
+                seen.add(game.pending_benefits[0])
+                clone = copy.deepcopy(env)
+                for e in (env, clone):
+                    e.step(ACCEPT_BENEFIT)
+                assert flatten_observation(clone.observe(clone.agent_selection)["observation"]
+                                           ).tobytes() == flatten_observation(
+                    env.observe(env.agent_selection)["observation"]).tobytes()
+                continue
+            fm.step(rng.choice(fm.legal_actions()))
+        if len(seen) == 2:
+            break
+    assert seen == {Benefit.HOSPICE, Benefit.UNIVERSITY}
 
 
 # ── storage keeps whatever fits ──────────────────────────────────────────────
@@ -81,7 +333,8 @@ def test_goods_that_fit_are_all_kept_without_a_decision(goods, warehouses):
                                                 106 + C, 106 + T, 106 + K, 106 + S}),
 ])
 def test_goods_that_do_not_fit_leave_a_choice(goods, warehouses, legal):
-    """"When players cannot store all their extra goods, they may choose"."""
+    """Captain: "When players cannot store all their extra goods, they may
+    choose"."""
     env, g, p = _storage_turn(goods, warehouses)
     assert set(np.flatnonzero(env.valid_action_mask()).tolist()) == legal
 
@@ -161,7 +414,6 @@ def test_single_mayor_placement_is_automatic():
     used to ask the agent for it; every other single-action decision was
     already automatic."""
     from puerto_rico.components import IslandTile
-    from puerto_rico.constants import TileType
 
     env = PuertoRicoEnv(num_players=3)
     env.reset(seed=0)
@@ -207,8 +459,6 @@ def test_step_rejects_actions_outside_the_mask():
 
 
 def test_engine_refuses_a_role_in_the_middle_of_a_phase():
-    from puerto_rico.constants import Role
-
     g = _game()
     g.select_role(g.current_player_idx, Role.SETTLER)
     with pytest.raises(ValueError, match="between phases"):

@@ -29,7 +29,7 @@ def test_play_accepts_baseline_names_and_the_3p_track():
     r = run("tools/play.py", "--agent", "random", "--players", "3",
             "--vs", "Random,Factory", "--games", "3")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "observation length 293" in r.stdout
+    assert "observation length 298" in r.stdout
 
     r = run("tools/play.py", "--agent", "no_such_file.py:Nope", "--games", "1")
     assert r.returncode != 0 and "cannot load" in r.stderr

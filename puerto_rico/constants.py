@@ -11,6 +11,14 @@ class Phase(IntEnum):
     PROSPECTOR = 7
     END_ROUND = 8
 
+class Benefit(IntEnum):
+    """Optional benefits offered as an accept/decline decision (actions 170/171)."""
+    MAYOR_PRIVILEGE = 0    # the mayor's extra colonist from the supply
+    HOSPICE = 1            # a colonist on the tile just placed
+    UNIVERSITY = 2         # a colonist on the building just built
+    CAPTAIN_PRIVILEGE = 3  # +1 VP with the captain's first load
+    HARBOR = 4             # +1 VP with every load
+
 class Role(IntEnum):
     SETTLER = 0
     MAYOR = 1

@@ -4,7 +4,7 @@ from enum import Enum
 from typing import List, Dict, Optional, Tuple
 
 from puerto_rico.constants import (
-    Phase, Role, Good, TileType, BuildingType,
+    Phase, Role, Good, TileType, BuildingType, Benefit,
     PLANTATION_COUNTS, QUARRY_COUNT, VP_CHIPS_SETUP,
     COLONIST_SHIP_SETUP, COLONIST_SUPPLY_SETUP,
     STARTING_DOUBLOONS, CARGO_SHIPS_SETUP, BUILDING_DATA, GOOD_PRICES,
@@ -88,6 +88,13 @@ class PuertoRicoGame:
         self._captain_done = set()
         self._captain_declined = set()
         self._storage_assignments = {i: {'windrose': None, 'warehouses': []} for i in range(self.num_players)}
+        # Optional benefits awaiting the current player's accept/decline decision,
+        # in order, and the position (island index for the hospice, city index for
+        # the university) of the tile or building a colonist would go to. A
+        # position, not the object: the hand-rolled __deepcopy__ below rebuilds
+        # the boards, so an object reference would point outside the copy.
+        self.pending_benefits: List[Benefit] = []
+        self._benefit_target: Optional[int] = None
         self._hacienda_used = False
         self._colonists_ship_underfilled = False # Evaluated at end of Mayor phase
         
@@ -107,7 +114,7 @@ class PuertoRicoGame:
     _CLONE_LIST_FIELDS = frozenset({
         "trading_house", "plantation_stack", "face_up_plantations",
         "plantation_discard", "available_roles", "roles_in_play",
-        "_craftsman_produced_kinds",
+        "_craftsman_produced_kinds", "pending_benefits",
     })
 
     def __deepcopy__(self, memo):
@@ -330,6 +337,7 @@ class PuertoRicoGame:
 
     def select_role(self, player_idx: int, role: Role):
         """Player selects a role. Transitions game to that phase."""
+        self._require_no_pending_benefit()
         if self.current_phase not in (None, Phase.END_ROUND):
             raise ValueError("Roles are chosen only between phases.")
         if player_idx != self.current_player_idx:
@@ -357,19 +365,13 @@ class PuertoRicoGame:
             self.current_phase = Phase.SETTLER
         elif role == Role.MAYOR:
             self.current_phase = Phase.MAYOR
-            # Privilege: take 1 from supply
+            # Rulebook, Mayor: "The player who chooses this role may first take one
+            # colonist from the colonist supply (not from the colonist ship!) as
+            # the privilege." Optional, so it is offered before the distribution.
             if self.colonists_supply > 0:
-                p.unplaced_colonists += 1
-                self.colonists_supply -= 1
-            # Distribute colonists on ship immediately
-            idx = player_idx
-            while self.colonists_ship > 0:
-                self.players[idx].unplaced_colonists += 1
-                self.colonists_ship -= 1
-                idx = (idx + 1) % self.num_players
-            
-            # Recall all colonists for current player (strategy-based placement)
-            self.players[self.current_player_idx].recall_all_colonists()
+                self._offer_benefits([Benefit.MAYOR_PRIVILEGE])
+            else:
+                self._distribute_colonists()
 
         elif role == Role.BUILDER:
             self.current_phase = Phase.BUILDER
@@ -438,12 +440,71 @@ class PuertoRicoGame:
         """Returns the idx of the player who picked the current active role."""
         return self.active_role_player
 
+    def _require_no_pending_benefit(self):
+        if self.pending_benefits:
+            raise ValueError(f"A {self.pending_benefits[0].name} decision is pending.")
+
+    def _offer_benefits(self, benefits: List[Benefit], target: Optional[int] = None):
+        """Queue optional benefits for the current player. Play resumes once
+        resolve_benefit has settled every one of them."""
+        self.pending_benefits = list(benefits)
+        self._benefit_target = target
+
+    def resolve_benefit(self, player_idx: int, accept: bool):
+        """Accept or decline the first pending benefit, then continue the phase
+        once none remains. Declining has no effect (a declined captain's
+        privilege is used up all the same: it belongs to the first load)."""
+        if not self.pending_benefits or player_idx != self.current_player_idx:
+            raise ValueError("No benefit decision is pending for this player.")
+        benefit = self.pending_benefits.pop(0)
+        p = self.players[player_idx]
+        if accept:
+            if benefit == Benefit.MAYOR_PRIVILEGE:
+                # From the supply, never from the ship.
+                p.unplaced_colonists += 1
+                self.colonists_supply -= 1
+            elif benefit in (Benefit.HOSPICE, Benefit.UNIVERSITY):
+                # "If there are no more colonists in the colonist supply, the player
+                # may take one from the colonist ship."
+                if self.colonists_supply > 0:
+                    self.colonists_supply -= 1
+                else:
+                    self.colonists_ship -= 1
+                if benefit == Benefit.HOSPICE:
+                    p.island_board[self._benefit_target].is_occupied = True
+                else:
+                    p.city_board[self._benefit_target].colonists += 1
+            else:
+                # Captain's privilege or harbor: +1 VP. The VP supply may go
+                # negative ("track them with pencil and paper").
+                self.vp_chips -= 1
+                p.add_vp(1)
+        if self.pending_benefits:
+            return
+        self._benefit_target = None
+        if benefit == Benefit.MAYOR_PRIVILEGE:
+            self._distribute_colonists()
+        else:
+            self._advance_phase_turn()
+
+    def _distribute_colonists(self):
+        """Mayor: the colonists on the ship go one at a time to each player,
+        starting with the mayor; the mayor's placement turn then starts with all
+        of their colonists back on the windrose."""
+        idx = self.active_role_player
+        while self.colonists_ship > 0:
+            self.players[idx].unplaced_colonists += 1
+            self.colonists_ship -= 1
+            idx = (idx + 1) % self.num_players
+        self.players[self.current_player_idx].recall_all_colonists()
+
     def action_mayor_place_colonist(self, player_idx: int, is_city: bool, slot_idx: int):
         """
         Place a single colonist into an empty slot on the island or city.
         The phase automatically advances if the player runs out of colonists 
         or has no more valid empty slots.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.MAYOR or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Mayor phase.")
             
@@ -544,6 +605,7 @@ class PuertoRicoGame:
         Craftsman picks their 1 extra privilege good after everyone has auto-produced.
         If they pass, privilege_good is None.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CRAFTSMAN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Craftsman phase.")
             
@@ -568,6 +630,7 @@ class PuertoRicoGame:
         """
         sell_good: Good to sell, or None to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.TRADER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Trader phase.")
             
@@ -605,6 +668,7 @@ class PuertoRicoGame:
         Allows a player with an occupied Hacienda to draw a face-down plantation tile.
         This does not end their turn. They must still call action_settler afterwards.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.SETTLER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Settler phase.")
         p = self.players[player_idx]
@@ -627,6 +691,7 @@ class PuertoRicoGame:
         Set to -1 to take Quarry (if privilege or construction hut).
         Set to -2 to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.SETTLER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Settler phase.")
             
@@ -659,21 +724,21 @@ class PuertoRicoGame:
             else:
                 raise ValueError("Invalid plantation choice.")
                 
-        # Hospice check ONLY applies to the officially drafted tile
-        if tile_placed and p.is_building_occupied(BuildingType.HOSPICE):
-            if self.colonists_supply > 0:
-                p.island_board[-1].is_occupied = True
-                self.colonists_supply -= 1
-            elif self.colonists_ship > 0:
-                p.island_board[-1].is_occupied = True
-                self.colonists_ship -= 1
-                
+        # Rulebook, Hospice: "they may take a colonist from the colonist supply and
+        # place it on the newly acquired plantation or quarry tile" -- optional,
+        # and only for this regular tile, never for the hacienda's extra tile.
+        if (tile_placed and p.is_building_occupied(BuildingType.HOSPICE)
+                and (self.colonists_supply > 0 or self.colonists_ship > 0)):
+            self._offer_benefits([Benefit.HOSPICE], target=len(p.island_board) - 1)
+            return
+
         self._advance_phase_turn()
 
     def action_builder(self, player_idx: int, building_choice: Optional[BuildingType]):
         """
         building_choice: The building to build. None to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.BUILDER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Builder phase.")
             
@@ -704,25 +769,24 @@ class PuertoRicoGame:
             p.build_building(building_choice)
             self.building_supply[building_choice] -= 1
             
-            # University — official rule (Deluxe rulebook, University): the free
-            # colonist goes "on the newly acquired tile", and "if there are no
-            # more colonists in the colonist supply, they may take one from the
-            # colonist ship. If there are also none there, they take none."
-            if p.is_building_occupied(BuildingType.UNIVERSITY):
+            # University — official rule (Deluxe rulebook, University): the owner
+            # "may take a colonist from the colonist supply and place it on the
+            # newly acquired tile", and "if there are no more colonists in the
+            # colonist supply, they may take one from the colonist ship. If there
+            # are also none there, they take none." Optional, so it is offered.
+            # A university built just now has no colonist and does not apply.
+            if (p.is_building_occupied(BuildingType.UNIVERSITY)
+                    and (self.colonists_supply > 0 or self.colonists_ship > 0)):
                 # Target the building just built, NOT city_board[-1]: a large
                 # building appends (building, OCCUPIED_SPACE), so the last entry
                 # is the dummy second space. Putting the colonist there leaves
                 # the large building unstaffed and silently forfeits its
                 # end-game bonus until the next Mayor redistribution.
-                new_slot = next(b for b in reversed(p.city_board)
-                                if b.building_type == building_choice)
-                if self.colonists_supply > 0:
-                    new_slot.colonists += 1
-                    self.colonists_supply -= 1
-                elif self.colonists_ship > 0:
-                    new_slot.colonists += 1
-                    self.colonists_ship -= 1
-                    
+                new_slot = next(i for i in range(len(p.city_board) - 1, -1, -1)
+                                if p.city_board[i].building_type == building_choice)
+                self._offer_benefits([Benefit.UNIVERSITY], target=new_slot)
+                return
+
         self._advance_phase_turn()
 
     def action_captain_load(self, player_idx: int, ship_idx: int, good_type: Good):
@@ -731,12 +795,12 @@ class PuertoRicoGame:
         The engine then computes VPs.
         If player has Wharf, ship_idx can be -1 (imaginary ship).
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CAPTAIN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain phase.")
             
         p = self.players[player_idx]
-        has_privilege = (player_idx == self.active_role_player_idx())
-        
+
         amount = p.goods[good_type]
         if amount == 0:
             raise ValueError("Player has no goods of this type.")
@@ -789,39 +853,44 @@ class PuertoRicoGame:
             ship.current_load += loaded_amount
             ship.good_type = good_type
             
-        # VPs
-        points_earned = loaded_amount
-        if has_privilege and not getattr(self, '_captain_privilege_used', False):
-            points_earned += 1
-            self._captain_privilege_used = True
-            
         if is_wharf:
             self._wharf_used[player_idx] = True
-            
-        if p.is_building_occupied(BuildingType.HARBOR):
-            points_earned += 1
-            
-        self.vp_chips -= points_earned # May go negative, which indicates triggered game end
-        p.add_vp(points_earned) # Players earn VP even if VP chips are exhausted
-        
+
+        # 1 VP per good loaded. "When the VP chips are exhausted, players earning VP
+        # thereafter should track them with pencil and paper": chip depletion only
+        # triggers the end (check_game_end), so the supply may go negative.
+        self.vp_chips -= loaded_amount
+        p.add_vp(loaded_amount)
+
         p.remove_good(good_type, loaded_amount)
         if is_wharf:
             self.goods_supply[good_type] += loaded_amount # Wharf goods return to supply immediately
 
         # Any load gives the players who passed with a usable wharf another turn.
         self._captain_declined.clear()
-        
-        # In actual Puerto Rico, a player MUST load if they can.
-        # So instead of immediately advancing, the player's turn continues until they can't load.
-        # But for RL MDP, it's easier to: Action -> State update. 
-        # Player MUST pick a valid load action, or a PASS action. If they pick PASS while they can load,
-        # the env raises an error or penalizes them.
+
+        # The captain's privilege (+1 VP with the first load, a wharf load
+        # included) and then the harbor (+1 VP with every load) are optional
+        # benefits: "they may choose not to use the action or privilege of the
+        # placard chosen", and "Players are not required to use the special
+        # function of an occupied beige building if they do not want to".
+        benefits = []
+        if player_idx == self.active_role_player_idx() and not self._captain_privilege_used:
+            self._captain_privilege_used = True
+            benefits.append(Benefit.CAPTAIN_PRIVILEGE)
+        if p.is_building_occupied(BuildingType.HARBOR):
+            benefits.append(Benefit.HARBOR)
+        if benefits:
+            self._offer_benefits(benefits)
+            return
+
         self._advance_phase_turn()
 
     def action_captain_pass(self, player_idx: int):
         """
         Player indicates they can no longer load any goods.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CAPTAIN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain phase.")
             

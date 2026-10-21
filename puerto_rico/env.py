@@ -10,10 +10,14 @@ from gymnasium import spaces
 import numpy as np
 
 from puerto_rico.engine import PuertoRicoGame
-from puerto_rico.constants import Phase, Role, Good, TileType, BuildingType, BUILDING_DATA, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
+from puerto_rico.constants import Phase, Role, Good, TileType, BuildingType, Benefit, BUILDING_DATA, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
+
+ACCEPT_BENEFIT = 170
+DECLINE_BENEFIT = 171
 
 _GOODS = tuple(Good)
 _ROLES = tuple(Role)
+_N_BENEFITS = len(Benefit)
 _NOT_BUILDINGS = (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE)
 _PRODUCES = {b: data[5] for b, data in BUILDING_DATA.items() if data[5] is not None}
 
@@ -23,7 +27,7 @@ _GLOBAL_LAYOUT = (
     ("cargo_ships_good_onehot", 18), ("cargo_ships_load", 3), ("cargo_ships_space", 3),
     ("colonists_ship", 1), ("colonists_supply", 1), ("current_phase_onehot", 10),
     ("current_player", 1), ("face_up_plantation_counts", 6), ("game_progress", 1),
-    ("goods_supply", 5), ("governor_idx", 1),
+    ("goods_supply", 5), ("governor_idx", 1), ("pending_benefit", _N_BENEFITS),
     ("quarry_stack", 1), ("role_doubloons", 8), ("roles_available", None),
     ("trading_house_count", 1), ("trading_house_has_good", 5), ("vp_chips", 1),
 )
@@ -152,6 +156,7 @@ class PuertoRicoEnv(AECEnv):
         # 106-110: Captain Store Warehouse (Good 0~4)
         # 120-125: Mayor - Place colonist on Island by TileType (120+TileType.value)
         # 140-162: Mayor - Place colonist on City by BuildingType (140+BuildingType.value)
+        # 170-171: Accept / decline the pending optional benefit (Benefit 0~4)
         return spaces.Discrete(200)
 
     def action_space(self, agent: str) -> spaces.Discrete:
@@ -173,8 +178,10 @@ class PuertoRicoEnv(AECEnv):
         - current_phase: one-hot (10)                                    [was: 1 ordinal]
         - NEW derived: production_capacity(5), game_progress(1),
                        cargo_ship_space(3), island/city empty spaces
+        - pending_benefit: one-hot over Benefit (5), all zero when no benefit
+          decision is pending
 
-        Total obs_dim: 74 (global) + 73 x num_players (per-player) = 293 for 3P
+        Total obs_dim: 79 (global) + 73 x num_players (per-player) = 298 for 3P
         """
         obs_space = {
             "observation": spaces.Dict({
@@ -193,6 +200,8 @@ class PuertoRicoEnv(AECEnv):
                     "game_progress": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
                     "goods_supply": spaces.Box(low=0, high=15, shape=(5,), dtype=np.float32),
                     "governor_idx": spaces.Box(low=0, high=self.num_players - 1, shape=(1,), dtype=np.float32),
+                    # The benefit awaiting an accept/decline decision: one-hot over Benefit
+                    "pending_benefit": spaces.Box(low=0, high=1, shape=(_N_BENEFITS,), dtype=np.float32),
                     "quarry_stack": spaces.Box(low=0, high=9, shape=(1,), dtype=np.float32),
                     "role_doubloons": spaces.Box(low=0, high=20, shape=(8,), dtype=np.float32),
                     "roles_available": spaces.MultiBinary(8),
@@ -314,8 +323,8 @@ class PuertoRicoEnv(AECEnv):
         Returns True if a step was taken, False if the current player must decide.
         """
         game = self.game
-        if game.current_phase is None:
-            return False
+        if game.current_phase is None or game.pending_benefits:
+            return False                  # a benefit decision always has two actions
 
         if game.current_phase == Phase.MAYOR:
             player_idx = game.current_player_idx
@@ -498,6 +507,10 @@ class PuertoRicoEnv(AECEnv):
             g_type = Good(action - 93)
             self.game.action_craftsman(player_idx, privilege_good=g_type)
 
+        elif action in (ACCEPT_BENEFIT, DECLINE_BENEFIT):
+            # The pending optional benefit (game.pending_benefits[0])
+            self.game.resolve_benefit(player_idx, accept=(action == ACCEPT_BENEFIT))
+
         else:
             raise ValueError(f"Action {action} is not part of the action encoding.")
 
@@ -561,7 +574,7 @@ class PuertoRicoEnv(AECEnv):
         elif self.game.current_phase == Phase.CAPTAIN_STORE:
             self.game.action_captain_store_pass(player_idx)
         elif self.game.current_phase == Phase.MAYOR:
-            raise ValueError("Cannot pass in Mayor phase - must select a strategy.")
+            raise ValueError("Cannot pass in Mayor phase - colonists must be placed.")
         elif self.game.current_phase == Phase.CRAFTSMAN:
             self.game.action_craftsman(player_idx, privilege_good=None)
         else:
@@ -600,6 +613,10 @@ class PuertoRicoEnv(AECEnv):
         vals.append(0.0)  # game_progress, filled in after the players are scanned
         vals += [game.goods_supply[g] for g in _GOODS]
         vals.append(game.governor_idx)
+        pending = [0.0] * _N_BENEFITS
+        if game.pending_benefits:
+            pending[game.pending_benefits[0]] = 1.0
+        vals += pending
         vals.append(game.quarry_stack)
         role_doubloons = game.role_doubloons
         vals += [role_doubloons.get(role, 0) for role in _ROLES]
@@ -711,7 +728,12 @@ class PuertoRicoEnv(AECEnv):
         p = game.players[cp]
         phase = game.current_phase
 
-        if phase == Phase.END_ROUND or phase is None:
+        if game.pending_benefits:
+            # A benefit decision admits only accept or decline.
+            mask[ACCEPT_BENEFIT] = True
+            mask[DECLINE_BENEFIT] = True
+
+        elif phase == Phase.END_ROUND or phase is None:
             for r in game.available_roles:
                 mask[r] = True
 

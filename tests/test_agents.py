@@ -5,7 +5,11 @@ import pytest
 
 from agents import (ActionValueAgent, FactoryAgent, MctsAgent, RandomAgent,
                     SearchLiteAgent, ShippingRushAgent, TradeBuildingAgent)
+from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM
 from tournament.match import play_game
+
+OBS_2P = GLOBAL_DIM + 2 * PER_PLAYER_DIM      # 225
+OBS_3P = GLOBAL_DIM + 3 * PER_PLAYER_DIM      # 298
 
 AGENT_FACTORIES = [
     ("Random", RandomAgent),
@@ -23,7 +27,7 @@ if importlib.util.find_spec("torch") is not None:    # torch is an optional extr
 
 
 # Every baseline except PPO plays both tracks; an untrained PpoAgent() is a
-# 293-dim network, so it is 3p-only by construction (the per-track checkpoints
+# 298-dim network, so it is 3p-only by construction (the per-track checkpoints
 # are covered by test_ppo_plays_both_tracks_with_one_checkpoint_each).
 TWO_PLAYER_FACTORIES = [(n, m) for n, m in AGENT_FACTORIES if n != "PPO"]
 
@@ -167,7 +171,7 @@ def test_ppo_checkpoint_carries_its_own_track():
 
     from agents.ppo_agent import PpoAgent, PpoNetwork
 
-    for num_players, obs_dim in ((2, 220), (3, 293)):
+    for num_players, obs_dim in ((2, OBS_2P), (3, OBS_3P)):
         net = PpoNetwork(obs_dim=obs_dim)
         path = tmp_checkpoint(net, num_players)
         agent = PpoAgent(path)
@@ -178,7 +182,7 @@ def test_ppo_checkpoint_carries_its_own_track():
         mask[15] = 1
         assert agent.act(good, mask) == 15
 
-        wrong = np.zeros(293 if obs_dim == 220 else 220, dtype=np.float32)
+        wrong = np.zeros(OBS_3P if obs_dim == OBS_2P else OBS_2P, dtype=np.float32)
         with pytest.raises(ValueError, match="track"):
             agent.act(wrong, mask)
 
@@ -190,7 +194,7 @@ def test_ppo_plays_both_tracks_with_one_checkpoint_each():
     the observation, which is how the registry's PPO baseline plays 2p and 3p."""
     from agents.ppo_agent import PpoAgent, PpoNetwork
 
-    paths = [tmp_checkpoint(PpoNetwork(obs_dim=d), n) for n, d in ((2, 220), (3, 293))]
+    paths = [tmp_checkpoint(PpoNetwork(obs_dim=d), n) for n, d in ((2, OBS_2P), (3, OBS_3P))]
     for seats in (2, 3):
         agents = [PpoAgent(paths)] + [RandomAgent(seed=s) for s in range(1, seats)]
         result = play_game(agents, seed=0, time_limit_s=5.0)
@@ -215,13 +219,25 @@ def test_ppo_entry_example_loads_its_weight_file(tmp_path):
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     shutil.copy(os.path.join(root, "examples", "ppo_entry", "my_agent.py"), tmp_path)
-    torch.save({"model_state": PpoNetwork(obs_dim=220).state_dict(),
+    torch.save({"model_state": PpoNetwork(obs_dim=OBS_2P).state_dict(),
                 "args": {"egocentric": True, "num_players": 2}},
                tmp_path / "weights.pt")
 
     cls = load_agent_class(f"{tmp_path / 'my_agent.py'}:MyPpoAgent")
     result = play_game([cls(), RandomAgent(seed=1)], seed=0, time_limit_s=5.0)
     assert sum(result["illegal"]) == 0
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None,
+                    reason="PPO needs the optional torch extra")
+def test_ppo_refuses_a_checkpoint_of_the_old_observation_layout():
+    """220 / 293 inputs: trained before the observation gained pending_benefit."""
+    from agents.ppo_agent import PpoAgent, PpoNetwork
+
+    for old_width in (220, 293):
+        path = tmp_checkpoint(PpoNetwork(obs_dim=old_width), 2 if old_width == 220 else 3)
+        with pytest.raises(ValueError, match="retrained"):
+            PpoAgent(path)
 
 
 def tmp_checkpoint(net, num_players):

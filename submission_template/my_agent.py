@@ -31,11 +31,12 @@ class MyAgent(Agent):
         """Choose ONE legal action.
 
         observation : float32 vector of the game state. Its length depends on the
-                      track — (220,) in the 2p / 1-vs-1 track, (293,) in the 3p
+                      track — (225,) in the 2p / 1-vs-1 track, (298,) in the 3p
                       track. `len(observation)` tells you which.
         action_mask : int vector of shape (200,) in both tracks; action_mask[a]
                       == 1 iff action a is legal. You MUST return an `a` with
-                      mask[a] == 1.
+                      mask[a] == 1. When only 170 (accept) and 171 (decline)
+                      are legal, an optional benefit is on offer.
 
         Returns: the chosen action index (int in [0, 200)).
 

@@ -40,6 +40,7 @@ def test_university_staffs_the_building_it_just_built():
 
     supply_before = game.colonists_supply
     game.action_builder(0, BuildingType.GUILDHALL)
+    game.resolve_benefit(0, accept=True)          # the colonist is optional
 
     guildhall = next(b for b in p.city_board
                      if b.building_type == BuildingType.GUILDHALL)
@@ -60,6 +61,7 @@ def test_university_free_colonist_also_works_for_small_buildings():
          if b.building_type == BuildingType.UNIVERSITY).colonists = 1
 
     game.action_builder(0, BuildingType.SMALL_MARKET)
+    game.resolve_benefit(0, accept=True)
     market = next(b for b in p.city_board
                   if b.building_type == BuildingType.SMALL_MARKET)
     assert market.colonists == 1

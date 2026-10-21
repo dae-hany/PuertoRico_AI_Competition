@@ -197,7 +197,7 @@ class ForwardModel:
         return np.flatnonzero(unwrapped.valid_action_mask()).tolist()
 
     def observation(self) -> np.ndarray:
-        """Flattened observation for the player to move (220-dim in 2p, 293-dim in 3p)."""
+        """Flattened observation for the player to move (225-dim in 2p, 298-dim in 3p)."""
         obs = self._env.observe(self._env.agent_selection)
         return flatten_observation(obs["observation"])
 
@@ -227,7 +227,10 @@ class ForwardModel:
     # ── transition ───────────────────────────────────────────────────────────
     def step(self, action: int) -> None:
         """Apply ``action`` for the current player and advance to the next
-        decision point, skipping any players that have already finished."""
+        decision point, skipping any players that have already finished.
+
+        Raises ``ValueError`` if ``action`` is not legal (not in
+        :meth:`legal_actions`), as the environment's ``step`` does."""
         self._env.step(int(action))
         self._skip_finished()
 
