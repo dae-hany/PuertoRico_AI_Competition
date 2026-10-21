@@ -203,6 +203,8 @@ def serialize_state(env):
         "current_phase": game.current_phase.name if game.current_phase is not None else "INIT/ROLE_SELECT",
         "active_role": game.active_role.name if game.active_role is not None else None,
         "active_role_player": game.active_role_player,
+        # the optional benefit awaiting accept (170) / decline (171), or None
+        "pending_benefit": game.pending_benefits[0].name if game.pending_benefits else None,
         "governor_idx": game.governor_idx,
         "vp_chips": game.vp_chips,
         "colonists_supply": game.colonists_supply,

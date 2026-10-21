@@ -60,19 +60,33 @@ const BUILDING_ABILITIES = {
     HACIENDA: "Settler: you may also draw one extra random plantation from the stack.",
     CONSTRUCTION_HUT: "Settler: you may take a Quarry instead of a plantation.",
     SMALL_WAREHOUSE: "Captain: keep 1 type of good through the Captain phase (not forced onto ships).",
-    HOSPICE: "Settler: each new plantation/quarry you take arrives with a free colonist on it.",
+    HOSPICE: "Settler: you may put a free colonist on each new plantation/quarry you take (you are asked each time).",
     OFFICE: "Trader: you may sell a good even if the same kind is already in the trading house.",
     LARGE_MARKET: "Trader: +2 doubloons whenever you sell a good.",
     LARGE_WAREHOUSE: "Captain: keep 2 types of good through the Captain phase.",
     FACTORY: "Craftsman: bonus doubloons for producing many DIFFERENT goods — 2/3/4/5 kinds give 1/2/3/5 doubloons.",
-    UNIVERSITY: "Builder: each building you construct comes with a free colonist.",
-    HARBOR: "Captain: +1 victory point each time you ship goods.",
-    WHARF: "Captain: your own private ship (one good type, any amount), once per Captain phase.",
+    UNIVERSITY: "Builder: you may put a free colonist on each building you construct (you are asked each time).",
+    HARBOR: "Captain: +1 victory point each time you ship goods (you may decline it).",
+    WHARF: "Captain: your own private ship (one good type, any amount), once per Captain phase. You choose when: pass now, and you get another turn if anyone loads after you.",
     GUILDHALL: "End game (if staffed): +1 VP per small production building, +2 VP per large production building.",
     RESIDENCE: "End game (if staffed): VP from filled island spaces — up to 9 → 4, 10 → 5, 11 → 6, 12 → 7 VP.",
     FORTRESS: "End game (if staffed): +1 VP per 3 colonists you own.",
     CUSTOMS_HOUSE: "End game (if staffed): +1 VP per 4 shipping VP (chips) you earned.",
     CITY_HALL: "End game (if staffed): +1 VP per violet (purple) building you own.",
+};
+
+// Optional benefits offered as accept (170) / decline (171) decisions.
+const BENEFIT_QUESTIONS = {
+    MAYOR_PRIVILEGE: "Mayor's privilege: take one extra colonist from the supply?",
+    HOSPICE: "Hospice: put a colonist from the supply on the tile you just placed?",
+    UNIVERSITY: "University: put a colonist from the supply on the building you just built?",
+    CAPTAIN_PRIVILEGE: "Captain's privilege: take 1 extra VP with this first load?",
+    HARBOR: "Harbor: take 1 extra VP for this load?",
+};
+const BENEFIT_NAMES = {
+    MAYOR_PRIVILEGE: "Mayor's privilege", HOSPICE: "Hospice colonist",
+    UNIVERSITY: "University colonist", CAPTAIN_PRIVILEGE: "Captain's privilege VP",
+    HARBOR: "Harbor VP",
 };
 
 let _bldgTip = null;
@@ -382,6 +396,17 @@ function renderGame() {
     const prompt = document.getElementById("action-prompt");
     if (gameState.game_over) {
         prompt.innerHTML = "<strong>Game Over!</strong> Click 'Restart' or view final standing details.";
+    } else if (isHumanTurn && gameState.pending_benefit) {
+        // An optional benefit: the only legal actions are accept (170) and decline (171).
+        const question = BENEFIT_QUESTIONS[gameState.pending_benefit] || "Take the offered benefit?";
+        prompt.innerHTML = `<strong>It is your turn! ${question}</strong>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+                <button type="button" class="btn btn-primary btn-small" id="benefit-accept-btn">Accept</button>
+                <button type="button" class="btn btn-secondary btn-small" id="benefit-decline-btn">Decline</button>
+            </div>`;
+        prompt.className = "action-prompt";
+        document.getElementById("benefit-accept-btn").addEventListener("click", () => sendAction(170));
+        document.getElementById("benefit-decline-btn").addEventListener("click", () => sendAction(171));
     } else if (isHumanTurn) {
         let text = "It is your turn! ";
         const phase = gameState.current_phase;
@@ -396,7 +421,7 @@ function renderGame() {
         } else if (phase === "CAPTAIN") {
             text += "Choose a good to load on a valid cargo ship. You must load if possible, or click Pass.";
         } else if (phase === "CAPTAIN_STORE") {
-            text += "Store remaining goods in Windrose (holds 1 barrel) or Warehouse slots. Click Pass when done.";
+            text += "Your goods do not all fit: choose what to keep on the Windrose (1 barrel) and in Warehouse slots (all of a kind), then click Pass. (Goods that fit are kept without asking.)";
         } else if (phase === "MAYOR") {
             text += "Place colonists one by one onto island plantations or city buildings.";
         } else if (phase === "CRAFTSMAN") {
@@ -406,7 +431,9 @@ function renderGame() {
         prompt.className = "action-prompt";
     } else {
         const ap = gameState.players[gameState.current_agent_idx];
-        prompt.innerHTML = `Waiting for Player ${gameState.current_agent_idx + 1} — <strong>${ap.label}</strong> to act...`;
+        const deciding = gameState.pending_benefit
+            ? ` (deciding: ${BENEFIT_NAMES[gameState.pending_benefit] || gameState.pending_benefit})` : "";
+        prompt.innerHTML = `Waiting for Player ${gameState.current_agent_idx + 1} — <strong>${ap.label}</strong> to act${deciding}...`;
         prompt.className = "action-prompt warning";
     }
     
