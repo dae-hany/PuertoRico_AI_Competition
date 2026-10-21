@@ -31,4 +31,5 @@ packages = [
     "tournament",
     "tournament.rankers",
     "training",
+    "verification",
 ]
