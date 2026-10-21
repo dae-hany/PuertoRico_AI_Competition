@@ -23,6 +23,11 @@ class ExampleAgent(Agent):
     def act(self, observation: np.ndarray, action_mask: np.ndarray) -> int:
         legal = set(int(a) for a in np.where(action_mask > 0.5)[0])
 
+        # An optional benefit (a privilege colonist or VP, the Hospice or
+        # University colonist, the Harbor VP): 170 accepts it, 171 declines it.
+        if legal == {170, 171}:
+            return 170
+
         # Preference order over action *groups* (see docs/OBSERVATION_AND_ACTIONS.md):
         #   Captain ship-loading (44-63) -> earns victory points by shipping
         #   Building (16-38)             -> permanent VP and engine pieces
