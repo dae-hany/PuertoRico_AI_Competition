@@ -11,6 +11,26 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-21 — TrueSkill rates only games between distinct agents
+
+The 3p track's official metric rated a game that seats one agent more than
+once (the round-robin plays groups such as `[A, A, B]`) seat by seat, and each
+seat's update overwrote that agent's rating: only the last seat's result
+counted, and the scale drifted with the results. Over the 1,000 games of the
+3p heuristic round-robin in docs/BASELINES.md, the field's mean μ ended at 34.8
+on the old engine and at 19.4 on the new one (the prior is 25), against 26.9
+and 28.3 with those games left out; the order was the same either way.
+
+* `tournament/rankers/trueskill_ranker.py` skips such games, since TrueSkill
+  models every seat as a different player. The win rate still counts them,
+  and the 2p Elo (Bradley–Terry) already treated a self-match as neutral.
+  `tournament.runner.run_round_robin` and `tools/run_ladder.py` include such
+  groups by default, so this changes official 3p ratings, not only the
+  baseline report. Test:
+  `tests/test_tournament.py::test_trueskill_skips_games_that_seat_an_agent_twice`.
+* docs/BASELINES.md was regenerated: only the 3p TrueSkill column moves.
+  docs/RANKING.md states the rule. Tests: 195 → 196.
+
 ## 2026-10-21 — the verified rules: accept/decline decisions, a 225/298 observation
 
 The research engine this repo shares an ancestor with (`PuertoRico_ESWA`,

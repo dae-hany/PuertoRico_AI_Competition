@@ -31,11 +31,11 @@ Seat-balanced. Ties split the win. Planner budgets: MCTS = 60 simulations / roll
 
 | Rank | Agent | TrueSkill (official) | Win% | 95% CI | Games |
 |-----:|-------|----------:|-----:|:------:|------:|
-| 1 | ShippingRush | 21.44 | 55.8% | [0.52, 0.60] | 600 |
-| 2 | ActionValue | 19.92 | 52.9% | [0.49, 0.57] | 600 |
-| 3 | TradeBuilding | 17.66 | 31.3% | [0.28, 0.35] | 600 |
-| 4 | Factory | 15.69 | 22.2% | [0.19, 0.26] | 600 |
-| 5 | Random | 11.14 | 4.4% | [0.03, 0.06] | 600 |
+| 1 | ShippingRush | 30.18 | 55.8% | [0.52, 0.60] | 600 |
+| 2 | ActionValue | 29.61 | 52.9% | [0.49, 0.57] | 600 |
+| 3 | TradeBuilding | 26.33 | 31.3% | [0.28, 0.35] | 600 |
+| 4 | Factory | 24.08 | 22.2% | [0.19, 0.26] | 600 |
+| 5 | Random | 20.15 | 4.4% | [0.03, 0.06] | 600 |
 
 ### 3p — planners vs the heuristics (win rate)
 
