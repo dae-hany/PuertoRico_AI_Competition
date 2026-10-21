@@ -806,12 +806,15 @@ class PuertoRicoEnv(AECEnv):
             if not can_load_anything:
                 mask[15] = True
 
+        elif phase == Phase.CAPTAIN_STORE and game.goods_all_fit(p):
+            # Goods that fit must all be kept, so there is nothing to choose.
+            mask[15] = True
+
         elif phase == Phase.CAPTAIN_STORE:
             assign = game._storage_assignments[cp]
             windrose = assign['windrose']
             warehouses = assign['warehouses']
-            slots = ((1 if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE) else 0)
-                     + (2 if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE) else 0))
+            slots = game.warehouse_slots(p)
             windrose_free = windrose is None
             warehouse_free = len(warehouses) < slots
             unstored = False

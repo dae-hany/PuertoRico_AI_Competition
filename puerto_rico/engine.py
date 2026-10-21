@@ -842,6 +842,26 @@ class PuertoRicoGame:
         self._captain_passed_players.add(player_idx)
         self._advance_phase_turn()
 
+    @staticmethod
+    def warehouse_slots(p) -> int:
+        """Kinds the player's occupied warehouses keep in full: one for the small, two
+        for the large warehouse."""
+        return ((1 if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE) else 0)
+                + (2 if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE) else 0))
+
+    @classmethod
+    def goods_all_fit(cls, p) -> bool:
+        """Whether every good the player holds can be kept: at most as many kinds as
+        warehouse slots, or exactly one kind more when one of the kinds is a single
+        good (it goes on the windrose). Rulebook, Captain: players "must store the
+        goods left on their windroses", and only "when players cannot store all their
+        extra goods, they may choose which goods to store" -- so goods that fit are
+        kept, without a decision."""
+        kinds = [g for g in Good if p.goods[g] > 0]
+        slots = cls.warehouse_slots(p)
+        return len(kinds) <= slots or (
+            len(kinds) == slots + 1 and any(p.goods[g] == 1 for g in kinds))
+
     def action_captain_store_windrose(self, player_idx: int, good_type: Good):
         """
         Assign a single barrel of a good to the Windrose.
@@ -852,6 +872,8 @@ class PuertoRicoGame:
         p = self.players[player_idx]
         if p.goods[good_type] == 0:
             raise ValueError(f"Player does not have {good_type.name}.")
+        if self.goods_all_fit(p):
+            raise ValueError("All goods fit, so they are all kept; there is nothing to choose.")
             
         if self._storage_assignments[player_idx]['windrose'] is not None:
             raise ValueError("Windrose slot is already occupied.")
@@ -871,14 +893,10 @@ class PuertoRicoGame:
         p = self.players[player_idx]
         if p.goods[good_type] == 0:
             raise ValueError(f"Player does not have {good_type.name}.")
+        if self.goods_all_fit(p):
+            raise ValueError("All goods fit, so they are all kept; there is nothing to choose.")
             
-        max_wh_slots = 0
-        if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE):
-            max_wh_slots += 1
-        if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE):
-            max_wh_slots += 2
-            
-        if len(self._storage_assignments[player_idx]['warehouses']) >= max_wh_slots:
+        if len(self._storage_assignments[player_idx]['warehouses']) >= self.warehouse_slots(p):
             raise ValueError("All warehouse slots are already used.")
             
         if good_type in self._storage_assignments[player_idx]['warehouses']:
@@ -891,23 +909,22 @@ class PuertoRicoGame:
 
     def action_captain_store_pass(self, player_idx: int):
         """
-        Finalize storage. Discard unstored goods.
-        Must not voluntarily discard if space is available.
+        Finalize storage. Keep everything if it all fits; otherwise discard the
+        unassigned goods, which is legal only once every storage slot holds a kind.
         """
         if self.current_phase != Phase.CAPTAIN_STORE or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain Store phase.")
             
         p = self.players[player_idx]
         assign = self._storage_assignments[player_idx]
+        if self.goods_all_fit(p):
+            self._advance_phase_turn()
+            return
         
         unstored_types = [g for g in Good if p.goods[g] > 0 and g != assign['windrose'] and g not in assign['warehouses']]
         
-        max_wh_slots = 0
-        if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE): max_wh_slots += 1
-        if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE): max_wh_slots += 2
-        
         has_empty_windrose = (assign['windrose'] is None)
-        has_empty_wh = len(assign['warehouses']) < max_wh_slots
+        has_empty_wh = len(assign['warehouses']) < self.warehouse_slots(p)
         
         if len(unstored_types) > 0:
             if has_empty_windrose or has_empty_wh:
