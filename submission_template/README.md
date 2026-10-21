@@ -42,10 +42,11 @@ action forfeits that move to a random legal one. Full details:
 
 ## What the inputs mean
 
-- `observation` — a float vector describing the full game state; **220-dim in the
-  2p track, 293-dim in the 3p track** (`len(observation)` tells you which).
+- `observation` — a float vector describing the full game state; **225-dim in the
+  2p track, 298-dim in the 3p track** (`len(observation)` tells you which).
 - `action_mask` — a 200-dim 0/1 vector of which actions are currently legal
-  (same in both tracks).
+  (same in both tracks). When only 170 (accept) and 171 (decline) are legal,
+  an optional benefit is on offer.
 
 The field-by-field layout is in
 [`../docs/OBSERVATION_AND_ACTIONS.md`](../docs/OBSERVATION_AND_ACTIONS.md).

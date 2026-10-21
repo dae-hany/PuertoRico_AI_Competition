@@ -30,6 +30,12 @@ turn order — but the player who *chose* it gets a small **privilege** (an extr
 good, a discount, a bonus VP). Any role left unpicked at the end of a
 round gains **one doubloon**, making it more attractive next round.
 
+Privileges and building functions are **optional** in the rulebook. The
+engine asks only about the five that spend colonists or VP chips, whose
+exhaustion ends the game (see [Optional benefits](#optional-benefits)); the
+ones that only pay doubloons are always applied, since refusing money never
+helps.
+
 How many roles are on the table and picked each round depends on the track:
 
 - **3p track:** 6 role tiles (Settler … Captain, no Prospector). Each of the 3
@@ -43,11 +49,11 @@ The engine indexes roles **0–7** (Prospector‑2 only appears with 5 players):
 | # | Role | Action (all players) | Chooser's privilege |
 |---|------|----------------------|---------------------|
 | 0 | Settler | Take one **face‑up plantation** tile onto your island (or pass). The unpicked face‑up tiles are then discarded and new ones are dealt. The **Hacienda** lets you also draw an extra random plantation; the **Construction Hut** lets you take a Quarry instead. | May take a **Quarry** instead of a plantation |
-| 1 | Mayor | The colonists on the colonist ship are handed out one at a time, starting with the chooser; then every player (re)places all of their colonists onto plantations, quarries and buildings. A tile or building only works if **staffed**. Afterwards the ship is refilled with one colonist per empty building circle (at least one per player). | Takes **1 extra colonist** from the supply |
+| 1 | Mayor | The colonists on the colonist ship are handed out one at a time, starting with the chooser; then every player (re)places all of their colonists onto plantations, quarries and buildings, and must fill every empty circle they can. A tile or building only works if **staffed**. Afterwards the ship is refilled with one colonist per empty building circle (at least one per player). | May first take **1 extra colonist** from the supply (asked) |
 | 2 | Builder | Buy **one building** with doubloons, or pass (staffed quarries reduce the cost; you cannot own two of the same building). | Pays **1 doubloon less** |
 | 3 | Craftsman | Every player produces goods they have capacity for (staffed plantation **and** staffed production building), automatically. | Takes **1 extra good** of a kind they just produced |
 | 4 | Trader | Sell **one** good to the trading house for doubloons, or pass. A kind already in the house cannot be sold (unless you have an Office); the house holds **4** goods and is emptied when full at the end of the phase. | Receives **+1 doubloon** on their sale |
-| 5 | Captain | Ship goods onto the cargo ships for VP chips (**1 VP chip per good shipped**). Loading is **compulsory** while you can load; see [Shipping](#shipping-captain-details). | **+1 VP** on their first load (once per phase) |
+| 5 | Captain | Ship goods onto the cargo ships for VP chips (**1 VP chip per good shipped**). Loading is **compulsory** while you can load; see [Shipping](#shipping-captain-details). | **+1 VP** with their first load (once per phase; asked) |
 | 6–7 | Prospector‑1 / ‑2 | (No shared action.) | Chooser simply gains **one doubloon** |
 
 ## Goods
@@ -94,14 +100,14 @@ is how many colonists it can hold. Values below are exact (engine `BUILDING_DATA
 | 7 | Hacienda | 2 | 1 | 1 | Settler: you may also draw one **extra random plantation**. |
 | 8 | Construction Hut | 2 | 1 | 1 | Settler: you may take a **Quarry** instead of a plantation. |
 | 9 | Small Warehouse | 3 | 1 | 1 | Captain: **keep 1 type** of good through the Captain phase. |
-| 10 | Hospice | 4 | 2 | 1 | Settler: each new tile arrives with a **free colonist**. |
+| 10 | Hospice | 4 | 2 | 1 | Settler: you may put a **free colonist** on each new plantation or quarry you take (not on the Hacienda's tile). |
 | 11 | Office | 5 | 2 | 1 | Trader: sell a good **even if its kind is already** in the house. |
 | 12 | Large Market | 5 | 2 | 1 | Trader: **+2** doubloons when you sell a good. |
 | 13 | Large Warehouse | 6 | 2 | 1 | Captain: **keep 2 types** of good through the Captain phase. |
 | 14 | Factory | 7 | 3 | 1 | Craftsman: bonus doubloons for **different** goods produced — 2/3/4/5 kinds → **1/2/3/5**. |
-| 15 | University | 8 | 3 | 1 | Builder: each building you construct arrives with a **free colonist**. |
-| 16 | Harbor | 8 | 3 | 1 | Captain: **+1 VP** each time you ship goods. |
-| 17 | Wharf | 9 | 3 | 1 | Captain: your **own private ship** (one good type, any amount), once per Captain phase. |
+| 15 | University | 8 | 3 | 1 | Builder: you may put a **free colonist** on each building you construct. |
+| 16 | Harbor | 8 | 3 | 1 | Captain: **+1 VP** each time you ship goods (optional). |
+| 17 | Wharf | 9 | 3 | 1 | Captain: your **own private ship** (one good type, any amount), once per Captain phase, when you choose. |
 
 **Large buildings** — each costs **10**, is worth **4 VP**, capacity 1, takes
 **two** city spaces, and gives
@@ -121,7 +127,8 @@ an **end‑game bonus** (only if staffed):
   them from the Trader, Prospector, unpicked‑role bonuses, and the Factory.
 - **Colonists** are workers. The Mayor hands them out from the **colonist ship**,
   which is refilled from the supply each round. A plantation or building does
-  nothing until a colonist is placed on it.
+  nothing until a colonist is placed on it. The Hospice and University
+  colonists come from the supply, or from the ship once the supply is empty.
 - **Quarries** discount building purchases: when you build, each **staffed**
   quarry lowers the price by **1 doubloon**, up to the building's printed VP value
   (so a 4‑VP building can be discounted by at most 4).
@@ -138,19 +145,36 @@ loading **one kind of good per turn** until nobody can load any more:
 - Loading is **compulsory**: if you can load something, you must. You choose the
   good type, but you must use the ship that takes the **most** of it, and you
   load as many of that type as fit.
-- At the end of the phase each player keeps **one** good (more with a
-  Warehouse); the rest go back to the supply. Full ships are then emptied.
+- A **Wharf** owner who cannot load onto a cargo ship may use the Wharf or
+  pass. Passing keeps their place: if anyone loads after them, they get another
+  turn. Loading ends when every player has passed since the last load.
+- At the end of the phase each player keeps **one** good on the windrose, plus
+  all goods of one kind per warehouse slot (Small Warehouse one kind, Large
+  Warehouse two). Goods that all fit are kept without asking; otherwise the
+  player chooses what to keep and the rest go back to the supply. Full ships
+  are then emptied.
 
 ## Game end
 
 The current round finishes and the game ends when **any** of these occurs:
 
-- the **VP‑chip supply** runs out,
+- the **VP‑chip supply** runs out (VP keep being paid beyond it),
 - the **colonist supply** cannot refill the colonist ship, or
 - any player fills **all 12** of their city building spaces.
 
 Highest total VP wins; ties broken by leftover doubloons + goods (still tied:
 the tied players share the win).
+
+## Optional benefits
+
+Five optional benefits are offered as a decision of their own, with exactly
+two legal actions, **170 accept** and **171 decline**: the Mayor's privilege
+colonist, the Hospice colonist, the University colonist, the Captain's
+privilege VP and the Harbor VP. Declining one can delay the end of the game
+(the colonist supply and the VP chips are end triggers); a declined Captain's
+privilege is gone, since it belongs to the first load. Exactly when each is
+offered is in
+[OBSERVATION_AND_ACTIONS.md](OBSERVATION_AND_ACTIONS.md#which-decisions-you-are-asked-for).
 
 ## Setup by player count
 

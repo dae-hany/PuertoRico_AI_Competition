@@ -13,12 +13,13 @@ python tools/validate_submission.py examples/ppo_entry/my_agent.py --track 2p
 python tools/play.py --agent examples/ppo_entry/my_agent.py:MyPpoAgent --vs PPO,Search
 ```
 
-As shipped it plays exactly like the `PPO` baseline, which beats `Search` in
-about two games of three ([training/README.md](../../training/README.md)), so
-against `PPO` it scores about 50%. That is the point to improve from: use the
-network's policy and value inside a search over `forward_model`, fine-tune it
-against the opponents it still loses to, or train your own and drop your
-`ckpt_final.pt` in as `weights.pt`.
+As shipped it plays exactly like the `PPO` baseline (how that compares with
+the other baselines, the search agents included, is measured in
+[docs/BASELINES.md](../../docs/BASELINES.md)), so a match against `PPO` is
+even. That is the point to improve from: use the network's policy and value
+inside a search over `forward_model`, fine-tune it against the opponents it
+still loses to, or train your own and drop your `ckpt_final.pt` in as
+`weights.pt`.
 
 It depends on PyTorch (`pip install -e ".[rl]"`) and imports `PpoNetwork` from
 this repository, which the rules allow. If you change the network's shape,

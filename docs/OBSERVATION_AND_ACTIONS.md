@@ -2,8 +2,8 @@
 
 Your agent's `act(observation, action_mask)` receives two NumPy arrays:
 
-- `observation` — `float32`, shape **track-dependent**: **(220,)** in the 2p
-  track, **(293,)** in the 3p track (`74 + 73 × num_players`) — the full game
+- `observation` — `float32`, shape **track-dependent**: **(225,)** in the 2p
+  track, **(298,)** in the 3p track (`79 + 73 × num_players`) — the full game
   state.
 - `action_mask` — `int8`, shape **(200,)** in **both** tracks — `action_mask[a]
   == 1` iff action `a` is currently legal. **You must return an `a` with
@@ -30,7 +30,7 @@ layout below lets you build features if you want to.
 | `0–7` | Role pick | choose a role: 0 Settler, 1 Mayor, 2 Builder, 3 Craftsman, 4 Trader, 5 Captain, 6 Prospector‑1, 7 Prospector‑2 |
 | `8–12` | Settler | take a face‑up plantation: 8 Coffee, 9 Tobacco, 10 Corn, 11 Sugar, 12 Indigo |
 | `13` | Settler | take a Quarry |
-| `15` | any | **Pass** / decline the current optional action (the most common action) |
+| `15` | any | **Pass**: decline the current optional action (the most common action) |
 | `16–38` | Builder | build the building of type `a − 16` (BuildingType 0–22) |
 | `39–43` | Trader | sell the good `a − 39` (Good 0–4) to the trading house |
 | `44–58` | Captain | load a good on a ship: `ship = (a − 44) // 5`, `good = (a − 44) % 5` |
@@ -41,32 +41,68 @@ layout below lets you build features if you want to.
 | `106–110` | Captain (store) | keep good `a − 106` in your Warehouse |
 | `120–125` | Mayor | place a colonist on an island tile of type `a − 120` (TileType 0–5) |
 | `140–162` | Mayor | place a colonist on a building of type `a − 140` (BuildingType 0–22) |
+| `170` | benefit | **accept** the optional benefit on offer (see below) |
+| `171` | benefit | **decline** it |
 
 The indices in the gaps (`14`, `69–92`, `98–104`, `111–119`, `126–139`,
-`163–199`) are unused and never legal; the `action_mask` is always the
-authoritative source of legality. `puerto_rico.describe_action(seat, a)` turns
-any index into an English sentence, which is handy in logs.
+`163–169`, `172–199`) are unused and never legal; the `action_mask` is always the
+authoritative source of legality, and the environment refuses (`ValueError`) an
+action outside it. `puerto_rico.describe_action(seat, a)` turns any index into an
+English sentence, which is handy in logs.
+
+### Which decisions you are asked for
+
+- **Optional benefits are a decision of their own.** Five benefits are
+  optional in the rulebook and can delay or hasten the end of the game, so you
+  are asked about each one when it arises: the mask then allows exactly `170`
+  (accept) and `171` (decline), and the global `pending_benefit` field says
+  which one it is:
+
+  | `pending_benefit` | Offered to | When |
+  |---:|---|---|
+  | 0 Mayor's privilege | the Mayor | right after choosing the Mayor, if the colonist supply is not empty: one extra colonist from the supply |
+  | 1 Hospice | the player who placed the tile | right after taking a face-up plantation or a quarry (not the Hacienda's tile), with an occupied Hospice: a colonist on it |
+  | 2 University | the player who built | right after building, with a University occupied before the build: a colonist on the new building |
+  | 3 Captain's privilege | the Captain | right after their first load of the phase (a Wharf load counts): +1 VP |
+  | 4 Harbor | the loading player | right after every load, with an occupied Harbor: +1 VP (after the Captain's privilege when both apply) |
+
+  Declining has no effect; a declined Captain's privilege is gone, since it
+  belongs to the first load. Benefits that only pay doubloons (the Builder's
+  and Trader's privileges, the markets, the Factory, the Prospector) are
+  always applied.
+- **A decision with a single legal action is never shown to you**: the
+  environment takes it. Every mask you see has at least two legal actions.
+- **Storage** after the Captain phase is asked for only when your goods do not
+  all fit (the windrose keeps one good, each warehouse slot all goods of one
+  kind); goods that fit are kept without asking.
+- **Wharf**: when you cannot load onto a cargo ship you may use your Wharf or
+  pass. Passing keeps your place, and if anyone loads after you, you get
+  another turn (and may still use the Wharf then).
 
 **Good order:** `0 Coffee, 1 Tobacco, 2 Corn, 3 Sugar, 4 Indigo`.
 **TileType order:** `0 Coffee, 1 Tobacco, 2 Corn, 3 Sugar, 4 Indigo plantation, 5 Quarry`.
 
 ---
 
-## Observation vector (220 dims in 2p, 293 dims in 3p)
+## Observation vector (225 dims in 2p, 298 dims in 3p)
 
 The vector is one global block followed by one block **per player**:
 
 ```
-3p (293):  [ global (74) | player_0 (73) | player_1 (73) | player_2 (73) ]
-              offset 0       offset 74       offset 147      offset 220
+3p (298):  [ global (79) | player_0 (73) | player_1 (73) | player_2 (73) ]
+              offset 0       offset 79       offset 152      offset 225
 
-2p (220):  [ global (74) | player_0 (73) | player_1 (73) ]
-              offset 0       offset 74       offset 147
+2p (225):  [ global (79) | player_0 (73) | player_1 (73) ]
+              offset 0       offset 79       offset 152
 ```
 
-So the global block (offsets 0–73) and the `player_0` / `player_1` blocks sit at
+So the global block (offsets 0–78) and the `player_0` / `player_1` blocks sit at
 the **same offsets** in both tracks; the 3p track simply adds a third
-`player_2` block. The general length is `74 + 73 × num_players`.
+`player_2` block. The general length is `79 + 73 × num_players`.
+
+(The layout changed on 2026-10-21, when `pending_benefit` was added: before
+then the global block had 74 values and the vector 220 / 293. A network
+trained on the old vector has to be retrained.)
 
 The per‑player blocks are **absolute** (player_0/1/…), not ego‑centric. On your
 turn, the global `current_player` field (offset 36) tells you which block is you.
@@ -94,7 +130,7 @@ what the harness hands you, and using it is entirely optional. The bundled PPO
 baseline is trained and played through this rotation
 (see [`../training/README.md`](../training/README.md)).
 
-### Global block — offsets 0–73
+### Global block — offsets 0–78
 
 | Offset | Field (size) | Meaning |
 |---:|---|---|
@@ -109,12 +145,13 @@ baseline is trained and played through this rotation
 | 43 | `game_progress` (1) | normalised game progress |
 | 44 | `goods_supply` (5) | remaining supply of each good |
 | 49 | `governor_idx` (1) | current governor (first to pick a role this round) |
-| 50 | `quarry_stack` (1) | quarries remaining |
-| 51 | `role_doubloons` (8) | doubloons sitting on each unpicked role |
-| 59 | `roles_available` (8) | 1 if that role can still be picked this round |
-| 67 | `trading_house_count` (1) | number of goods in the trading house (0–4) |
-| 68 | `trading_house_has_good` (5) | 1 per good type present in the trading house |
-| 73 | `vp_chips` (1) | victory‑point chips left in the supply (a game‑end trigger) |
+| 50 | `pending_benefit` (5) | one‑hot of the benefit you are asked to accept or decline (order above); all zero otherwise |
+| 55 | `quarry_stack` (1) | quarries remaining |
+| 56 | `role_doubloons` (8) | doubloons sitting on each unpicked role |
+| 64 | `roles_available` (8) | 1 if that role can still be picked this round |
+| 72 | `trading_house_count` (1) | number of goods in the trading house (0–4) |
+| 73 | `trading_house_has_good` (5) | 1 per good type present in the trading house |
+| 78 | `vp_chips` (1) | victory‑point chips left in the supply (a game‑end trigger; may go negative, since VP keep being paid when the chips run out) |
 
 ### Per‑player block — offsets 0–72 (within each player's 73‑dim block)
 
@@ -132,20 +169,20 @@ baseline is trained and played through this rotation
 | 71 | `unplaced_colonists` (1) | colonists held but not yet placed |
 | 72 | `vp_chips` (1) | VP chips the player has earned (from shipping) |
 
-So player *i*'s `doubloons` is at absolute index `74 + 73*i + 23`, and so on.
+So player *i*'s `doubloons` is at absolute index `79 + 73*i + 23`, and so on.
 
 ### Worked example: reading an observation
 
 ```python
 from puerto_rico import make_env, flatten_observation
-from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM   # 74, 73
+from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM   # 79, 73
 
 env = make_env(seed=0, num_players=2)
 raw = env.observe(env.agent_selection)
-obs = flatten_observation(raw["observation"])      # float32[220]: what act() receives
+obs = flatten_observation(raw["observation"])      # float32[225]: what act() receives
 
 me = int(obs[36])                                   # global: current_player
-print("to move: player", me, "| roles available:", obs[59:67].astype(int))
+print("to move: player", me, "| roles available:", obs[64:72].astype(int))
 for i in range(env.num_players):
     b = GLOBAL_DIM + PER_PLAYER_DIM * i             # start of player i's block
     print(f"player {i}{' (me)' if i == me else '    '}: "
@@ -163,7 +200,9 @@ player 1 (me): 3 doubloons, goods [0 0 0 0 0], 0 VP chips, 12 free city spaces
 
 (for this seed the governor, who picks the first role, is player 1; the trailing
 `0` in `roles_available` is the second Prospector, which the 2-player game
-removes).
+removes). If player 1 now picks the Mayor (`env.step(1)`), the next decision is
+the Mayor's privilege: the mask allows only `[170, 171]`, and `obs[50:55]` reads
+`[1 0 0 0 0]`.
 
 For the meaning of roles, goods, buildings, and scoring, see
 [`GAME_RULES.md`](GAME_RULES.md).

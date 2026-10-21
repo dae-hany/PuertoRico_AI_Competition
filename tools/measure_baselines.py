@@ -1,15 +1,16 @@
-"""tools/measure_baselines.py — regenerate the baseline numbers quoted in the docs.
+"""tools/measure_baselines.py — regenerate the baseline numbers the docs point to.
 
-The README and the submission guide make strength claims ("strongest in 2p",
-"beats every other baseline"). Those claims go stale the moment a baseline is
-improved, so this script re-measures them instead of anyone re-guessing:
+The README, the submission guide and the course pages send readers to
+docs/BASELINES.md for how strong each baseline is, and keep no numbers of their
+own: strength claims go stale the moment a baseline or a rule changes, so this
+script re-measures them instead of anyone re-guessing:
 
 * a **seat-balanced round-robin** over the fast heuristic pool, per track,
   scored with the track's official metric (Elo in 2p, TrueSkill in 3p);
 * **seat-balanced duels** for the expensive planners (MCTS, Search, PPO), which
   cannot sit in a full round-robin at a useful sample size;
-* in 2p, **PPO against each planner** (Search, SearchLite, MCTS), the numbers
-  behind "the strongest 2p baseline"; a cell is split into jobs of at most
+* in 2p, **PPO against each planner** (Search, SearchLite, MCTS): the learned
+  baseline against the search baselines; a cell is split into jobs of at most
   ``DUEL_JOB_GAMES`` games so a slow cell runs in parallel.
 
 Search-based strengths are only defined **at a stated compute budget** — an

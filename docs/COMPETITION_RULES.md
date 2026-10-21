@@ -18,8 +18,8 @@ leaderboard**:
 
 | Track | Game | Seats | `observation` shape |
 |-------|------|------:|--------------------:|
-| **2p** | 1-vs-1 Puerto Rico | 2 | **(220,)** |
-| **3p** | 3-player Puerto Rico | 3 | **(293,)** |
+| **2p** | 1-vs-1 Puerto Rico | 2 | **(225,)** |
+| **3p** | 3-player Puerto Rico | 3 | **(298,)** |
 
 - A submission is **per track**: you enter the 2p track, the 3p track, or both,
   and may submit a **different agent for each** (you can specialise for 1-vs-1 or
@@ -55,11 +55,13 @@ class MyAgent(Agent):
 ## Inputs
 
 - `observation` — a `float32` NumPy array. Its length is **track-dependent**:
-  **(220,)** in the 2p track, **(293,)** in the 3p track (it is
-  `74 + 73 × num_players`). Use `len(observation)` if you want one agent class to
+  **(225,)** in the 2p track, **(298,)** in the 3p track (it is
+  `79 + 73 × num_players`). Use `len(observation)` if you want one agent class to
   handle both.
 - `action_mask` — an `int` array of shape **(200,)** in both tracks, where `1`
-  marks a legal action.
+  marks a legal action. Every mask has at least two legal actions (a decision
+  with a single one is taken for you); when only `170` and `171` are legal, you
+  are deciding whether to accept an optional benefit.
 - Encoding details are in `docs/OBSERVATION_AND_ACTIONS.md`.
 
 ## Per-move time limit

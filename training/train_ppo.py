@@ -66,8 +66,8 @@ from puerto_rico.constants import Role
 
 ACT_DIM = 200
 
-# The observation is 74 global features plus 73 per player, so its length is a
-# function of the track: 220 in the 2p (1-vs-1) track, 293 in the 3p track.
+# The observation is 79 global features plus 73 per player, so its length is a
+# function of the track: 225 in the 2p (1-vs-1) track, 298 in the 3p track.
 # Nothing else in the loop depends on the seat count.
 from puerto_rico.observation import GLOBAL_DIM, PER_PLAYER_DIM
 
@@ -638,8 +638,8 @@ def parse_args():
                    help="Number of independent environments for rollout pooling")
     p.add_argument("--seed",            type=int,   default=42)
     p.add_argument("--num_players",     type=int,   default=3, choices=[2, 3],
-                   help="Which track to train for: 2 (1-vs-1, 220-dim obs) or "
-                        "3 (293-dim obs). A checkpoint is only valid for the "
+                   help="Which track to train for: 2 (1-vs-1, 225-dim obs) or "
+                        "3 (298-dim obs). A checkpoint is only valid for the "
                         "track it was trained on.")
     p.add_argument("--eval_interval",   type=int,   default=50_000,
                    help="Run evaluation every N timesteps")
