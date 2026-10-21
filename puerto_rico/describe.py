@@ -6,14 +6,23 @@
 
 The action index layout is documented in docs/OBSERVATION_AND_ACTIONS.md.
 """
-from puerto_rico.constants import BuildingType, Good, Role, TileType
+from puerto_rico.constants import Benefit, BuildingType, Good, Role, TileType
+
+_BENEFIT_TEXT = {
+    Benefit.MAYOR_PRIVILEGE: "the Mayor's privilege colonist",
+    Benefit.HOSPICE: "the Hospice colonist",
+    Benefit.UNIVERSITY: "the University colonist",
+    Benefit.CAPTAIN_PRIVILEGE: "the Captain's privilege VP",
+    Benefit.HARBOR: "the Harbor VP",
+}
 
 
 def describe_action(player_idx: int, action_idx: int, env=None) -> str:
     """One English sentence for ``action_idx`` played by seat ``player_idx``.
 
     ``env`` is optional: it is only used to name the current phase when the
-    action is a pass (15).
+    action is a pass (15), and the benefit on offer when it is an accept or a
+    decline (170, 171), so pass the env *before* the action is applied.
     """
     try:
         if 0 <= action_idx <= 7:
@@ -47,6 +56,11 @@ def describe_action(player_idx: int, action_idx: int, env=None) -> str:
             return f"Player {player_idx} placed a colonist on {BuildingType(action_idx - 140).name}."
         elif 93 <= action_idx <= 97:
             return f"Player {player_idx} chose {Good(action_idx - 93).name} as Craftsman privilege."
+        elif action_idx in (170, 171):
+            pending = getattr(getattr(env, "game", None), "pending_benefits", None)
+            what = _BENEFIT_TEXT[pending[0]] if pending else "the offered benefit"
+            verb = "accepted" if action_idx == 170 else "declined"
+            return f"Player {player_idx} {verb} {what}."
         return f"Player {player_idx} executed action {action_idx}."
     except Exception as e:  # never let a description break a log line
         return f"Player {player_idx} executed action {action_idx} (desc error: {e})."

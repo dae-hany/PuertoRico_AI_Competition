@@ -92,3 +92,23 @@ def test_a_play_game_result_becomes_a_replayable_record():
 def test_describe_action_names_the_role():
     assert describe_action(0, 2) == "Player 0 selected role BUILDER."
     assert "Unknown phase" in describe_action(1, 15)      # pass, no env given
+
+
+def test_a_record_from_the_old_rules_is_refused_with_a_reason():
+    env, actions = _play_random_game(seed=5)
+    record = build_record(env, seed=5, actions=actions)
+    assert record["rules"] and replays_exactly(record)
+
+    del record["rules"]                        # written before 2026-10-21
+    with pytest.raises(ReplayError, match="rules"):
+        replay_record(record)
+    assert not replays_exactly(record)
+
+
+def test_describe_action_names_the_benefit_on_offer():
+    env = make_env(seed=0, num_players=3)
+    seat = env.agent_name_mapping[env.agent_selection]
+    env.step(1)                                # the Mayor: its privilege is offered
+    assert "accepted the Mayor's privilege colonist" in describe_action(seat, 170, env)
+    assert "declined the Mayor's privilege colonist" in describe_action(seat, 171, env)
+    assert "the offered benefit" in describe_action(seat, 171)
