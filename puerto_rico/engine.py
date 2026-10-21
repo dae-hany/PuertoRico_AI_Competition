@@ -7,9 +7,7 @@ from puerto_rico.constants import (
     Phase, Role, Good, TileType, BuildingType,
     PLANTATION_COUNTS, QUARRY_COUNT, VP_CHIPS_SETUP,
     COLONIST_SHIP_SETUP, COLONIST_SUPPLY_SETUP,
-    STARTING_DOUBLOONS, CARGO_SHIPS_SETUP, BUILDING_DATA,
-    MayorStrategy, LARGE_VP_BUILDINGS, MAYOR_STRATEGY_BUILDINGS,
-    PRODUCTION_BUILDINGS, PLANTATION_TO_GOOD, GOOD_VALUE_ORDER
+    STARTING_DOUBLOONS, CARGO_SHIPS_SETUP, BUILDING_DATA, GOOD_PRICES,
 )
 from puerto_rico.components import CargoShip
 from puerto_rico.player import Player
@@ -91,15 +89,10 @@ class PuertoRicoGame:
         self._colonists_ship_underfilled = False # Evaluated at end of Mayor phase
         
         # For sequential tracking within a phase
-        self._phase_turn_offset = 0  # 0 to num_players-1, denotes who goes next in the action circle
         self.players_taken_action = 0
 
         # Discarded plantations
         self.plantation_discard: List[TileType] = []
-
-        self.contention_blocked_production = 0
-        self.contention_blocked_trading = 0
-        self.contention_wasted_goods = 0
 
         self._setup_players()
 
@@ -522,9 +515,6 @@ class PuertoRicoGame:
             
             kinds_produced = []
             for g in Good:
-                if production[g] > self.goods_supply[g]:
-                    self.contention_blocked_production += (production[g] - self.goods_supply[g])
-                    
                 amount = min(production[g], self.goods_supply[g])
                 if amount > 0:
                     p.add_good(g, amount)
@@ -587,15 +577,6 @@ class PuertoRicoGame:
                 raise ValueError("Trading house already has this good and player has no Office.")
                 
             # Process sale
-            from puerto_rico.constants import GOOD_PRICES
-            
-            # Check for forced down-sell contention
-            for g, count in p.goods.items():
-                if count > 0 and GOOD_PRICES[g] > GOOD_PRICES[sell_good]:
-                    if g in self.trading_house and not has_office:
-                        self.contention_blocked_trading += 1
-                        break
-            
             price = GOOD_PRICES[sell_good]
             
             if has_privilege:
@@ -608,22 +589,6 @@ class PuertoRicoGame:
             p.remove_good(sell_good, 1)
             p.add_doubloons(price)
             self.trading_house.append(sell_good)
-            
-        else:
-            p = self.players[player_idx]
-            if sum(p.goods.values()) > 0:
-                if len(self.trading_house) >= 4:
-                    self.contention_blocked_trading += 1
-                else:
-                    has_office = p.is_building_occupied(BuildingType.OFFICE)
-                    blocked = True
-                    for g, count in p.goods.items():
-                        if count > 0:
-                            if not (g in self.trading_house and not has_office):
-                                blocked = False
-                                break
-                    if blocked:
-                        self.contention_blocked_trading += 1
 
         self._advance_phase_turn()
 
@@ -959,7 +924,6 @@ class PuertoRicoGame:
                 
             discard = p.goods[g] - keep
             if discard > 0:
-                self.contention_wasted_goods += discard
                 p.remove_good(g, discard)
                 self.goods_supply[g] += discard
                 

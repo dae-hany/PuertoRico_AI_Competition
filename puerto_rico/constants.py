@@ -1,4 +1,4 @@
-from enum import IntEnum, auto
+from enum import IntEnum
 
 class Phase(IntEnum):
     SETTLER = 0
@@ -134,60 +134,3 @@ GOOD_PRICES = {
     Good.TOBACCO: 3,
     Good.COFFEE: 4
 }
-
-# Mayor Phase Strategy Enum
-class MayorStrategy(IntEnum):
-    CAPTAIN_FOCUS = 0        # Shipping strategy
-    TRADE_FACTORY_FOCUS = 1  # Trading + Factory strategy
-    BUILDING_FOCUS = 2       # Infrastructure strategy
-
-# Large VP Buildings (always highest priority)
-LARGE_VP_BUILDINGS = [
-    BuildingType.GUILDHALL,
-    BuildingType.RESIDENCE,
-    BuildingType.FORTRESS,
-    BuildingType.CUSTOMS_HOUSE,
-    BuildingType.CITY_HALL,
-]
-
-# Strategy-specific building priorities
-MAYOR_STRATEGY_BUILDINGS = {
-    MayorStrategy.CAPTAIN_FOCUS: [
-        BuildingType.WHARF,
-        BuildingType.HARBOR,
-        BuildingType.LARGE_WAREHOUSE,
-        BuildingType.SMALL_WAREHOUSE,
-    ],
-    MayorStrategy.TRADE_FACTORY_FOCUS: [
-        BuildingType.OFFICE,
-        BuildingType.LARGE_MARKET,
-        BuildingType.SMALL_MARKET,
-        BuildingType.FACTORY,
-    ],
-    MayorStrategy.BUILDING_FOCUS: [
-        BuildingType.UNIVERSITY,
-        BuildingType.HOSPICE,
-        BuildingType.CONSTRUCTION_HUT,
-        BuildingType.HACIENDA,
-    ],
-}
-
-# Production building to Good mapping (for production pairs)
-PRODUCTION_BUILDINGS = {
-    Good.COFFEE: [BuildingType.COFFEE_ROASTER],
-    Good.TOBACCO: [BuildingType.TOBACCO_STORAGE],
-    Good.SUGAR: [BuildingType.SUGAR_MILL, BuildingType.SMALL_SUGAR_MILL],
-    Good.INDIGO: [BuildingType.INDIGO_PLANT, BuildingType.SMALL_INDIGO_PLANT],
-}
-
-# Plantation to Good mapping
-PLANTATION_TO_GOOD = {
-    TileType.COFFEE_PLANTATION: Good.COFFEE,
-    TileType.TOBACCO_PLANTATION: Good.TOBACCO,
-    TileType.SUGAR_PLANTATION: Good.SUGAR,
-    TileType.INDIGO_PLANTATION: Good.INDIGO,
-    TileType.CORN_PLANTATION: Good.CORN,
-}
-
-# Good value order (descending) for production pair priority
-GOOD_VALUE_ORDER = [Good.COFFEE, Good.TOBACCO, Good.SUGAR, Good.INDIGO, Good.CORN]

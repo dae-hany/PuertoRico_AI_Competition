@@ -10,7 +10,30 @@ from gymnasium import spaces
 import numpy as np
 
 from puerto_rico.engine import PuertoRicoGame
-from puerto_rico.constants import Phase, Role, Good, TileType, BuildingType, BUILDING_DATA, MayorStrategy, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
+from puerto_rico.constants import Phase, Role, Good, TileType, BuildingType, BUILDING_DATA, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
+
+_GOODS = tuple(Good)
+_ROLES = tuple(Role)
+_NOT_BUILDINGS = (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE)
+_PRODUCES = {b: data[5] for b, data in BUILDING_DATA.items() if data[5] is not None}
+
+# Flat layout of the observation: (key, size) in key order; roles_available is int8
+# and kept apart from the float32 buffer (size None).
+_GLOBAL_LAYOUT = (
+    ("cargo_ships_good_onehot", 18), ("cargo_ships_load", 3), ("cargo_ships_space", 3),
+    ("colonists_ship", 1), ("colonists_supply", 1), ("current_phase_onehot", 10),
+    ("current_player", 1), ("face_up_plantation_counts", 6), ("game_progress", 1),
+    ("goods_supply", 5), ("governor_idx", 1),
+    ("quarry_stack", 1), ("role_doubloons", 8), ("roles_available", None),
+    ("trading_house_count", 1), ("trading_house_has_good", 5), ("vp_chips", 1),
+)
+_PLAYER_LAYOUT = (
+    ("building_colonists", 23), ("doubloons", 1), ("empty_city_spaces", 1), ("goods", 5),
+    ("has_building", 23), ("island_empty_spaces", 1), ("island_tile_count", 6),
+    ("island_tile_occupied", 6), ("production_capacity", 5), ("unplaced_colonists", 1),
+    ("vp_chips", 1),
+)
+
 
 def _copy_nested(v):
     """Fast deep copy of JSON-like bookkeeping (dicts/lists of scalars).
@@ -47,6 +70,29 @@ class PuertoRicoEnv(AECEnv):
         self._action_spaces = {agent: self._define_action_space() for agent in self.possible_agents}
         self._observation_spaces = {agent: self._define_observation_space() for agent in self.possible_agents}
 
+        # Slices of the flat observation buffer that _get_obs builds in one pass.
+        offset = 0
+        self._obs_global_slices = []
+        for key, size in _GLOBAL_LAYOUT:
+            if size is None:
+                self._obs_global_slices.append((key, None, None))
+            else:
+                self._obs_global_slices.append((key, offset, offset + size))
+                offset += size
+        self._obs_player_slices = []
+        for agent in self.possible_agents:
+            slices = []
+            for key, size in _PLAYER_LAYOUT:
+                slices.append((key, offset, offset + size))
+                offset += size
+            self._obs_player_slices.append((agent, slices))
+        space = self._observation_spaces[self.possible_agents[0]]["observation"]
+        assert [k for k, _ in _GLOBAL_LAYOUT] == list(space["global_state"].spaces)
+        assert all(size is None or space["global_state"][k].shape == (size,)
+                   for k, size in _GLOBAL_LAYOUT)
+        assert [k for k, _ in _PLAYER_LAYOUT] == list(space["players"]["player_0"].spaces)
+        assert all(space["players"]["player_0"][k].shape == (size,) for k, size in _PLAYER_LAYOUT)
+
     # Static config built once in __init__ and never mutated during a game.
     # Sharing (not deep-copying) these makes ForwardModel.clone() ~7x faster,
     # since the gymnasium observation Dict-space is by far the costliest object
@@ -55,6 +101,7 @@ class PuertoRicoEnv(AECEnv):
     _CLONE_SHARED_ATTRS = frozenset({
         "_action_spaces", "_observation_spaces",
         "possible_agents", "agent_name_mapping",
+        "_obs_global_slices", "_obs_player_slices",
     })
 
     # Flat {agent_name: scalar} bookkeeping — a shallow dict copy is a deep copy.
@@ -498,7 +545,7 @@ class PuertoRicoEnv(AECEnv):
             for i in range(self.num_players):
                 a_name = f"player_{i}"
                 self.rewards[a_name] = 0.0
-                self.infos[a_name] = self._get_info()
+                self.infos[a_name] = self._get_info(game_over=False)
                 # Expose phase ID as int for hierarchical agent routing
                 self.infos[a_name]["current_phase_id"] = int(
                     self.game.current_phase if self.game.current_phase is not None else 9
@@ -535,157 +582,123 @@ class PuertoRicoEnv(AECEnv):
             raise ValueError(f"Cannot pass in phase {self.game.current_phase.name if self.game.current_phase else 'INIT'}")
 
     def _get_obs(self):
+        """Observation dict of _define_observation_space. All float32 values are built in
+        one pass into a single buffer, and every entry is a slice (view) of it; the only
+        int8 entry, roles_available, is a separate array."""
         game = self.game
+        vals = []
 
-        # ═══════════════════════════════════════════════════════════════════════
-        # Global State
-        # ═══════════════════════════════════════════════════════════════════════
-
-        cargo_ships_good_onehot = np.zeros(18, dtype=np.float32)
-        cargo_ships_load = np.zeros(3, dtype=np.float32)
-        cargo_ships_space = np.zeros(3, dtype=np.float32)
-        for i, ship in enumerate(game.cargo_ships):
-            if i >= 3:
-                break
-            if ship.good_type is not None:
-                cargo_ships_good_onehot[i * 6 + ship.good_type.value] = 1.0
-            else:
-                cargo_ships_good_onehot[i * 6 + 5] = 1.0  # "none" class
-            cargo_ships_load[i] = float(ship.current_load)
-            cargo_ships_space[i] = float(ship.capacity - ship.current_load)
-
-        trading_house_has_good = np.zeros(5, dtype=np.float32)
-        for g in game.trading_house:
-            trading_house_has_good[g.value] = 1.0
-        trading_house_count = np.array([len(game.trading_house)], dtype=np.float32)
-
-        role_doubloons = np.zeros(8, dtype=np.float32)
-        roles_available = np.zeros(8, dtype=np.int8)
-        for i in range(8):
-            try:
-                role = Role(i)
-                role_doubloons[i] = float(game.role_doubloons.get(role, 0))
-                roles_available[i] = 1 if role in game.available_roles else 0
-            except ValueError:
-                pass
-
-        face_up_plantation_counts = np.zeros(6, dtype=np.float32)
+        # Global state, in key order (roles_available is int8 and kept apart).
+        onehot = [0.0] * 18
+        loads = [0.0] * 3
+        space = [0.0] * 3
+        for i, ship in enumerate(game.cargo_ships[:3]):
+            onehot[i * 6 + (5 if ship.good_type is None else ship.good_type)] = 1.0  # 5 = "none"
+            loads[i] = ship.current_load
+            space[i] = ship.capacity - ship.current_load
+        vals += onehot
+        vals += loads
+        vals += space
+        vals.append(game.colonists_ship)
+        vals.append(game.colonists_supply)
+        phase = [0.0] * 10
+        phase[9 if game.current_phase is None else game.current_phase] = 1.0
+        vals += phase
+        vals.append(game.current_player_idx)
+        face_up = [0.0] * 6
         for t in game.face_up_plantations:
             if t != TileType.EMPTY:
-                face_up_plantation_counts[t.value] += 1.0
+                face_up[t] += 1.0
+        vals += face_up
+        progress_at = len(vals)
+        vals.append(0.0)  # game_progress, filled in after the players are scanned
+        vals += [game.goods_supply[g] for g in _GOODS]
+        vals.append(game.governor_idx)
+        vals.append(game.quarry_stack)
+        role_doubloons = game.role_doubloons
+        vals += [role_doubloons.get(role, 0) for role in _ROLES]
+        roles_available = np.array([1 if role in game.available_roles else 0 for role in _ROLES],
+                                   dtype=np.int8)
+        vals.append(len(game.trading_house))
+        house = [0.0] * 5
+        for g in game.trading_house:
+            house[g] = 1.0
+        vals += house
+        vals.append(game.vp_chips)
 
-        current_phase_onehot = np.zeros(10, dtype=np.float32)
-        phase_idx = int(game.current_phase) if game.current_phase is not None else 9
-        current_phase_onehot[phase_idx] = 1.0
-
-        global_state = {
-            "cargo_ships_good_onehot": cargo_ships_good_onehot,
-            "cargo_ships_load": cargo_ships_load,
-            "cargo_ships_space": cargo_ships_space,
-            "colonists_ship": np.array([game.colonists_ship], dtype=np.float32),
-            "colonists_supply": np.array([game.colonists_supply], dtype=np.float32),
-            "current_phase_onehot": current_phase_onehot,
-            "current_player": np.array([game.current_player_idx], dtype=np.float32),
-            "face_up_plantation_counts": face_up_plantation_counts,
-            "game_progress": np.array([self._compute_game_progress()], dtype=np.float32),
-            "goods_supply": np.array([game.goods_supply[Good(i)] for i in range(5)], dtype=np.float32),
-            "governor_idx": np.array([game.governor_idx], dtype=np.float32),
-            "quarry_stack": np.array([game.quarry_stack], dtype=np.float32),
-            "role_doubloons": role_doubloons,
-            "roles_available": roles_available,
-            "trading_house_count": trading_house_count,
-            "trading_house_has_good": trading_house_has_good,
-            "vp_chips": np.array([game.vp_chips], dtype=np.float32),
-        }
-
-        players_obs = {}
-        for i in range(self.num_players):
-            p = game.players[i]
-
-            island_tile_count = np.zeros(6, dtype=np.float32)
-            island_tile_occupied = np.zeros(6, dtype=np.float32)
+        # Players, in key order.
+        max_city = 0
+        for p in game.players:
+            tile_count = [0.0] * 6
+            tile_occupied = [0.0] * 6
+            planted = [0] * 5          # occupied plantations per good (TileType 0-4 = Good 0-4)
             for t in p.island_board:
-                if t.tile_type != TileType.EMPTY:
-                    idx = t.tile_type.value
-                    island_tile_count[idx] += 1.0
+                kind = t.tile_type
+                if kind != TileType.EMPTY:
+                    tile_count[kind] += 1.0
                     if t.is_occupied:
-                        island_tile_occupied[idx] += 1.0
-
-            has_building = np.zeros(23, dtype=np.float32)
-            building_colonists = np.zeros(23, dtype=np.float32)
+                        tile_occupied[kind] += 1.0
+                        if kind < 5:
+                            planted[kind] += 1
+            has_building = [0.0] * 23
+            building_colonists = [0.0] * 23
+            workers = [0] * 5          # colonists in production buildings per good
+            buildings = 0
             for b in p.city_board:
                 bt = b.building_type
-                if bt not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE):
-                    has_building[bt.value] = 1.0
-                    building_colonists[bt.value] = float(b.colonists)
+                if bt not in _NOT_BUILDINGS:
+                    has_building[bt] = 1.0
+                    building_colonists[bt] = b.colonists
+                    buildings += 1
+                good = _PRODUCES.get(bt)
+                if good is not None:
+                    workers[good] += b.colonists
+            max_city = max(max_city, buildings)
+            capacity = [min(planted[g], workers[g]) for g in range(5)]
+            capacity[Good.CORN] = planted[Good.CORN]   # corn needs no production building
 
-            player_dict = {
-                "building_colonists": building_colonists,
-                "doubloons": np.array([p.doubloons], dtype=np.float32),
-                "empty_city_spaces": np.array([p.empty_city_spaces], dtype=np.float32),
-                "goods": np.array([p.goods[Good(g)] for g in range(5)], dtype=np.float32),
-                "has_building": has_building,
-                "island_empty_spaces": np.array([p.empty_island_spaces], dtype=np.float32),
-                "island_tile_count": island_tile_count,
-                "island_tile_occupied": island_tile_occupied,
-                "production_capacity": self._compute_production_capacity(p),
-                "unplaced_colonists": np.array([p.unplaced_colonists], dtype=np.float32),
-                "vp_chips": np.array([p.vp_chips], dtype=np.float32),
-            }
-            players_obs[f"player_{i}"] = player_dict
+            vals += building_colonists
+            vals.append(p.doubloons)
+            vals.append(p.empty_city_spaces)
+            vals += [p.goods[g] for g in _GOODS]
+            vals += has_building
+            vals.append(p.empty_island_spaces)
+            vals += tile_count
+            vals += tile_occupied
+            vals += capacity
+            vals.append(p.unplaced_colonists)
+            vals.append(p.vp_chips)
 
+        vals[progress_at] = self._compute_game_progress(max_city)
+        buf = np.array(vals, dtype=np.float32)
+        global_state = {key: (roles_available if lo is None else buf[lo:hi])
+                        for key, lo, hi in self._obs_global_slices}
+        players_obs = {name: {key: buf[lo:hi] for key, lo, hi in slices}
+                       for name, slices in self._obs_player_slices}
         return {
             "global_state": global_state,
             "players": players_obs
         }
 
-    def _get_info(self):
+    def _get_info(self, game_over=None):
         info = {"current_phase": self.game.current_phase.name if self.game.current_phase else "INIT"}
-        if getattr(self, 'game', None) and self.game.check_game_end():
+        if game_over is None:
+            game_over = getattr(self, 'game', None) is not None and self.game.check_game_end()
+        if game_over:
             info["final_scores"] = self.game.get_scores()
             info["episode_metrics"] = getattr(self, 'episode_metrics', {})
         return info
 
-    def _compute_production_capacity(self, p) -> np.ndarray:
-        capacity = np.zeros(5, dtype=np.float32)
-        plan_cnt = {g: 0 for g in Good}
-        for t in p.island_board:
-            if t.is_occupied:
-                if t.tile_type == TileType.COFFEE_PLANTATION:  plan_cnt[Good.COFFEE] += 1
-                elif t.tile_type == TileType.TOBACCO_PLANTATION: plan_cnt[Good.TOBACCO] += 1
-                elif t.tile_type == TileType.CORN_PLANTATION:    plan_cnt[Good.CORN] += 1
-                elif t.tile_type == TileType.SUGAR_PLANTATION:   plan_cnt[Good.SUGAR] += 1
-                elif t.tile_type == TileType.INDIGO_PLANTATION:  plan_cnt[Good.INDIGO] += 1
-
-        bldg_cap = {g: 0 for g in Good}
-        for b in p.city_board:
-            bt = b.building_type
-            if bt in (BuildingType.SMALL_INDIGO_PLANT, BuildingType.INDIGO_PLANT):
-                bldg_cap[Good.INDIGO] += b.colonists
-            elif bt in (BuildingType.SMALL_SUGAR_MILL, BuildingType.SUGAR_MILL):
-                bldg_cap[Good.SUGAR] += b.colonists
-            elif bt == BuildingType.TOBACCO_STORAGE:
-                bldg_cap[Good.TOBACCO] += b.colonists
-            elif bt == BuildingType.COFFEE_ROASTER:
-                bldg_cap[Good.COFFEE] += b.colonists
-
-        capacity[Good.COFFEE]  = min(plan_cnt[Good.COFFEE],  bldg_cap[Good.COFFEE])
-        capacity[Good.TOBACCO] = min(plan_cnt[Good.TOBACCO], bldg_cap[Good.TOBACCO])
-        capacity[Good.CORN]    = plan_cnt[Good.CORN]
-        capacity[Good.SUGAR]   = min(plan_cnt[Good.SUGAR],   bldg_cap[Good.SUGAR])
-        capacity[Good.INDIGO]  = min(plan_cnt[Good.INDIGO],  bldg_cap[Good.INDIGO])
-        return capacity
-
-    def _compute_game_progress(self) -> float:
+    def _compute_game_progress(self, max_city=None) -> float:
         game = self.game
         initial_vp = VP_CHIPS_SETUP.get(self.num_players, 75)
         vp_prog = max(0.0, (initial_vp - game.vp_chips)) / initial_vp
 
-        max_city = 0
-        for p in game.players:
-            filled = sum(1 for b in p.city_board
-                         if b.building_type not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE))
-            max_city = max(max_city, filled)
+        if max_city is None:
+            max_city = 0
+            for p in game.players:
+                filled = sum(1 for b in p.city_board if b.building_type not in _NOT_BUILDINGS)
+                max_city = max(max_city, filled)
         city_prog = max_city / 12.0
 
         initial_col = COLONIST_SUPPLY_SETUP.get(self.num_players, 55)
@@ -705,151 +718,130 @@ class PuertoRicoEnv(AECEnv):
                 for i in range(self.num_players)]
 
     def valid_action_mask(self):
+        """Legal actions of the current player (docs/OBSERVATION_AND_ACTIONS.md)."""
         mask = np.zeros(200, dtype=bool)
         game = self.game
-        p = game.players[game.current_player_idx]
+        cp = game.current_player_idx
+        p = game.players[cp]
         phase = game.current_phase
 
         if phase == Phase.END_ROUND or phase is None:
             for r in game.available_roles:
-                mask[r.value] = True
+                mask[r] = True
 
         elif phase == Phase.SETTLER:
             mask[15] = True # Pass
-
-            can_hacienda = (
-                p.is_building_occupied(BuildingType.HACIENDA) and
-                self.game.plantation_stack and
-                not getattr(self.game, '_hacienda_used', False) and
-                p.empty_island_spaces > 0
-            )
-            if can_hacienda:
-                mask[105] = True
-
             if p.empty_island_spaces > 0:
+                if (game.plantation_stack and not game._hacienda_used
+                        and p.is_building_occupied(BuildingType.HACIENDA)):
+                    mask[105] = True
                 for tile in game.face_up_plantations:
                     if tile != TileType.EMPTY:
-                        mask[8 + tile.value] = True
-
-            can_quarry = (game.current_player_idx == game.active_role_player_idx()) or p.is_building_occupied(BuildingType.CONSTRUCTION_HUT)
-            if can_quarry and game.quarry_stack > 0 and p.empty_island_spaces > 0:
-                mask[13] = True # TileType.QUARRY
+                        mask[8 + tile] = True
+                if game.quarry_stack > 0 and (cp == game.active_role_player or
+                                              p.is_building_occupied(BuildingType.CONSTRUCTION_HUT)):
+                    mask[13] = True # TileType.QUARRY
 
         elif phase == Phase.BUILDER:
             mask[15] = True # Pass
-            has_privilege = (game.current_player_idx == game.active_role_player_idx())
-            active_quarries = sum(1 for t in p.island_board if t.tile_type == TileType.QUARRY and t.is_occupied)
-
-            for b_type, count in game.building_supply.items():
-                if count > 0 and not p.has_building(b_type):
-                    spaces_needed = 2 if BUILDING_DATA[b_type][4] else 1
-                    if p.empty_city_spaces >= spaces_needed:
-                        base_cost = BUILDING_DATA[b_type][0]
-                        # Max reduction depends on building column. Base VP equals the column number (1 to 4).
-                        max_q = BUILDING_DATA[b_type][1]
-
-                        quarry_discount = min(active_quarries, max_q)
-                        privilege_discount = 1 if has_privilege else 0
-                        final_cost = max(0, base_cost - quarry_discount - privilege_discount)
-
-                        if p.doubloons >= final_cost:
-                            mask[16 + b_type.value] = True
+            empty = p.empty_city_spaces
+            if empty > 0:
+                discount = 1 if cp == game.active_role_player else 0
+                quarries = sum(1 for t in p.island_board
+                               if t.tile_type == TileType.QUARRY and t.is_occupied)
+                owned = {b.building_type for b in p.city_board}
+                for b_type, count in game.building_supply.items():
+                    if count > 0 and b_type not in owned:
+                        cost, column, _, _, large, _ = BUILDING_DATA[b_type]
+                        # Quarries reduce the cost up to the building's column, which equals
+                        # its VP; the privilege takes one more off; never below zero.
+                        if (empty >= (2 if large else 1)
+                                and p.doubloons >= max(0, cost - min(quarries, column) - discount)):
+                            mask[16 + b_type] = True
 
         elif phase == Phase.TRADER:
             mask[15] = True # Pass
             if len(game.trading_house) < 4:
                 has_office = p.is_building_occupied(BuildingType.OFFICE)
-                for g in Good:
-                    if p.goods[g] > 0:
-                        if g not in game.trading_house or has_office:
-                            mask[39 + g.value] = True
+                for g in _GOODS:
+                    if p.goods[g] > 0 and (has_office or g not in game.trading_house):
+                        mask[39 + g] = True
 
         elif phase == Phase.CAPTAIN:
-            # Need to find valid ship/good combos
+            ships = game.cargo_ships
+            carried = [s.good_type for s in ships]
             can_load_anything = False
-
-            # For each good, find the maximum loadable amount across all valid ships
-            max_loadable_for_good = {g: 0 for g in Good}
-            allowed_ships_for_good = {g: [] for g in Good}
-
-            for ship_idx, ship in enumerate(game.cargo_ships):
-                if not ship.is_full:
-                    for g in Good:
-                        if p.goods[g] > 0:
-                            allowed = False
-                            if ship.good_type is None:
-                                other_has_it = any(os.good_type == g for i, os in enumerate(game.cargo_ships) if i != ship_idx)
-                                if not other_has_it:
-                                    allowed = True
-                            elif ship.good_type == g:
-                                allowed = True
-
-                            if allowed:
-                                potential_load = min(p.goods[g], ship.capacity - ship.current_load)
-                                allowed_ships_for_good[g].append((ship_idx, potential_load))
-                                max_loadable_for_good[g] = max(max_loadable_for_good[g], potential_load)
-
-            for g, ships in allowed_ships_for_good.items():
-                max_load = max_loadable_for_good[g]
-                for ship_idx, potential_load in ships:
-                    if potential_load == max_load:
-                        mask[44 + (ship_idx * 5) + g.value] = True
-                        can_load_anything = True
+            for g in _GOODS:
+                held = p.goods[g]
+                if held == 0:
+                    continue
+                # A ship carrying g, or an empty ship while no other ship carries g.
+                options = []
+                for i, s in enumerate(ships):
+                    if s.current_load >= s.capacity:
+                        continue
+                    if s.good_type is None:
+                        if any(carried[j] == g for j in range(len(ships)) if j != i):
+                            continue
+                    elif s.good_type != g:
+                        continue
+                    options.append((i, min(held, s.capacity - s.current_load)))
+                # The player chooses the KIND freely, but among legal ships must take one
+                # where the most barrels fit, so only max-load ships are offered per kind.
+                if options:
+                    best = max(load for _, load in options)
+                    for i, load in options:
+                        if load == best:
+                            mask[44 + 5 * i + g] = True
+                            can_load_anything = True
 
             # Wharf
-            if p.is_building_occupied(BuildingType.WHARF) and not game._wharf_used.get(game.current_player_idx, False):
-                for g in Good:
+            if (p.is_building_occupied(BuildingType.WHARF)
+                    and not game._wharf_used.get(cp, False)):
+                for g in _GOODS:
                     if p.goods[g] > 0:
-                        mask[59 + g.value] = True
-
+                        mask[59 + g] = True
 
             # Pass only allowed if cannot load anything
             if not can_load_anything:
                 mask[15] = True
 
         elif phase == Phase.CAPTAIN_STORE:
-            assign = game._storage_assignments[game.current_player_idx]
-            unstored_types = [g for g in Good if p.goods[g] > 0 and g != assign['windrose'] and g not in assign['warehouses']]
-
-            max_wh_slots = 0
-            if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE): max_wh_slots += 1
-            if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE): max_wh_slots += 2
-
-            has_empty_windrose = (assign['windrose'] is None)
-            has_empty_wh = len(assign['warehouses']) < max_wh_slots
-
-            can_pass = True
-            if len(unstored_types) > 0:
-                if has_empty_windrose or has_empty_wh:
-                    can_pass = False
-
-            if can_pass:
+            assign = game._storage_assignments[cp]
+            windrose = assign['windrose']
+            warehouses = assign['warehouses']
+            slots = ((1 if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE) else 0)
+                     + (2 if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE) else 0))
+            windrose_free = windrose is None
+            warehouse_free = len(warehouses) < slots
+            unstored = False
+            for g in _GOODS:
+                if p.goods[g] > 0 and g != windrose and g not in warehouses:
+                    unstored = True
+                    if windrose_free:
+                        mask[64 + g] = True
+                    if warehouse_free:
+                        mask[106 + g] = True
+            # Finishing is legal only when nothing more can be stored.
+            if not unstored or not (windrose_free or warehouse_free):
                 mask[15] = True
-
-            for g in Good:
-                if p.goods[g] > 0:
-                    if has_empty_windrose and assign['windrose'] is None and g not in assign['warehouses']:
-                        mask[64 + g.value] = True
-                    if has_empty_wh and g != assign['windrose'] and g not in assign['warehouses']:
-                        mask[106 + g.value] = True
 
         elif phase == Phase.MAYOR:
             if p.unplaced_colonists > 0:
                 for t in p.island_board:
                     if t.tile_type != TileType.EMPTY and not t.is_occupied:
-                        mask[120 + t.tile_type.value] = True
+                        mask[120 + t.tile_type] = True
                 for b in p.city_board:
-                    if b.building_type not in (BuildingType.EMPTY, BuildingType.OCCUPIED_SPACE):
-                        if b.colonists < BUILDING_DATA[b.building_type][2]:
-                            mask[140 + b.building_type.value] = True
+                    bt = b.building_type
+                    if bt not in _NOT_BUILDINGS and b.colonists < BUILDING_DATA[bt][2]:
+                        mask[140 + bt] = True
 
         elif phase == Phase.CRAFTSMAN:
-            has_privilege = (game.current_player_idx == game.active_role_player_idx())
             mask[15] = True # Can always pass
-            if has_privilege:
+            if cp == game.active_role_player:
                 for g in getattr(game, '_craftsman_produced_kinds', []):
                     if game.goods_supply[g] > 0:
-                        mask[93 + g.value] = True
+                        mask[93 + g] = True
 
         elif phase == Phase.PROSPECTOR:
             mask[15] = True
