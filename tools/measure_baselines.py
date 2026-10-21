@@ -1,13 +1,17 @@
-"""tools/measure_baselines.py — regenerate the baseline numbers quoted in the docs.
+"""tools/measure_baselines.py — regenerate the baseline numbers the docs point to.
 
-The README and the submission guide make strength claims ("strongest in 2p",
-"beats every other baseline"). Those claims go stale the moment a baseline is
-improved, so this script re-measures them instead of anyone re-guessing:
+The README, the submission guide and the course pages send readers to
+docs/BASELINES.md for how strong each baseline is, and keep no numbers of their
+own: strength claims go stale the moment a baseline or a rule changes, so this
+script re-measures them instead of anyone re-guessing:
 
 * a **seat-balanced round-robin** over the fast heuristic pool, per track,
   scored with the track's official metric (Elo in 2p, TrueSkill in 3p);
 * **seat-balanced duels** for the expensive planners (MCTS, Search, PPO), which
-  cannot sit in a full round-robin at a useful sample size.
+  cannot sit in a full round-robin at a useful sample size;
+* in 2p, **PPO against each planner** (Search, SearchLite, MCTS): the learned
+  baseline against the search baselines; a cell is split into jobs of at most
+  ``DUEL_JOB_GAMES`` games so a slow cell runs in parallel.
 
 Search-based strengths are only defined **at a stated compute budget** — an
 agent that searches twice as long is a different opponent — so the budget is
@@ -45,6 +49,10 @@ MCTS_SIMS = 60
 MCTS_ROLLOUT_DEPTH = 40
 
 HEURISTICS = ["Random", "Factory", "TradeBuilding", "ShippingRush", "ActionValue"]
+
+#: 2p: games of PPO against each planner (seat-balanced, split into jobs).
+PLANNER_DUELS_2P = {"Search1500": 160, "SearchLite250": 40, f"MCTS{MCTS_SIMS}": 40}
+DUEL_JOB_GAMES = 16
 
 
 def make_agent(name):
@@ -167,6 +175,30 @@ def duel_table(rows, n_seats):
     return "\n".join(lines)
 
 
+def planner_duel_table(rows):
+    """PPO against each planner: ``win% (games), 95% CI`` per cell, pooled over
+    the jobs a cell was split into."""
+    from tournament.rankers.win_rate import wilson_ci
+
+    cells = {}
+    for row in rows:
+        c = cells.setdefault(row["opponent"], {"wins": 0.0, "games": 0, "margin": 0.0})
+        c["wins"] += row["win_rate"] * row["games"]
+        c["games"] += row["games"]
+        c["margin"] += row["mean_margin"] * row["games"]
+    opponents = [o for o in PLANNER_DUELS_2P if o in cells]
+    lines = ["| Agent | " + " | ".join(f"vs {o}" for o in opponents) + " |",
+             "|-------|" + "|".join(["------:"] * len(opponents)) + "|"]
+    texts = []
+    for o in opponents:
+        c = cells[o]
+        lo, hi = wilson_ci(c["wins"], c["games"])
+        texts.append(f"{c['wins'] / c['games'] * 100:.1f}% ({c['games']}; "
+                     f"95% CI [{lo:.2f}, {hi:.2f}])")
+    lines.append("| `PPO` | " + " | ".join(texts) + " |")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workers", type=int, default=12)
@@ -213,13 +245,25 @@ def main():
                     jobs_duel.append((focal, opponent, n_seats, n,
                                       500_000 + tag % 10_000, args.cell_budget))
 
-    print(f"{len(jobs_rr)} round-robin groups + {len(jobs_duel)} duel cells "
-          f"on {args.workers} workers", flush=True)
+    # 2p: PPO against the planners. No wall-clock cap (budget 0): these cells are
+    # the evidence for a ranking claim, so they always play their full sample.
+    jobs_planner = []
+    if not args.skip_planners and os.path.exists(PPO_CHECKPOINTS[2]):
+        for opponent, games in PLANNER_DUELS_2P.items():
+            games = 4 if args.quick else games
+            tag = zlib.crc32(f"PPO|{opponent}|planner-duel".encode())
+            for j, start in enumerate(range(0, games, DUEL_JOB_GAMES)):
+                jobs_planner.append(("PPO", opponent, 2, min(DUEL_JOB_GAMES, games - start),
+                                     700_000 + tag % 10_000 + 1_000 * j, 0))
+
+    print(f"{len(jobs_rr)} round-robin groups + {len(jobs_duel)} duel cells + "
+          f"{len(jobs_planner)} planner-duel jobs on {args.workers} workers", flush=True)
 
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         # Longest jobs first: a duel cell costs minutes and a round-robin group
         # costs seconds, so submitting the duels last leaves them as a tail that
         # runs almost serially while the rest of the pool sits idle.
+        planner_futures = [pool.submit(_duel, job) for job in jobs_planner]
         duel_futures = [(job[2], pool.submit(_duel, job)) for job in jobs_duel]
         rr_futures = [(job[1], pool.submit(_play_group, job)) for job in jobs_rr]
 
@@ -229,6 +273,7 @@ def main():
         duels = {2: [], 3: []}
         for n_seats, future in duel_futures:
             duels[n_seats].append(future.result())
+        planner_rows = [future.result() for future in planner_futures]
 
     out = [f"# Baseline strengths (generated by `tools/measure_baselines.py`)",
            "",
@@ -247,6 +292,9 @@ def main():
         if duels[n_seats]:
             out += [f"### {label} — planners vs the heuristics (win rate)", "",
                     duel_table(duels[n_seats], n_seats), ""]
+        if n_seats == 2 and planner_rows:
+            out += [f"### {label} — PPO against the planners (win rate)", "",
+                    planner_duel_table(planner_rows), ""]
 
     text = "\n".join(out)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)

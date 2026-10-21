@@ -4,12 +4,10 @@ from enum import Enum
 from typing import List, Dict, Optional, Tuple
 
 from puerto_rico.constants import (
-    Phase, Role, Good, TileType, BuildingType,
+    Phase, Role, Good, TileType, BuildingType, Benefit,
     PLANTATION_COUNTS, QUARRY_COUNT, VP_CHIPS_SETUP,
     COLONIST_SHIP_SETUP, COLONIST_SUPPLY_SETUP,
-    STARTING_DOUBLOONS, CARGO_SHIPS_SETUP, BUILDING_DATA,
-    MayorStrategy, LARGE_VP_BUILDINGS, MAYOR_STRATEGY_BUILDINGS,
-    PRODUCTION_BUILDINGS, PLANTATION_TO_GOOD, GOOD_VALUE_ORDER
+    STARTING_DOUBLOONS, CARGO_SHIPS_SETUP, BUILDING_DATA, GOOD_PRICES,
 )
 from puerto_rico.components import CargoShip
 from puerto_rico.player import Player
@@ -85,21 +83,26 @@ class PuertoRicoGame:
         # Phase-specific tracking flags
         self._captain_privilege_used = False
         self._wharf_used = {i: False for i in range(num_players)}
-        self._captain_passed_players = set()
+        # Captain turns: players who take no further turn in the phase, and players
+        # who passed since the most recent load while their wharf was still usable.
+        self._captain_done = set()
+        self._captain_declined = set()
         self._storage_assignments = {i: {'windrose': None, 'warehouses': []} for i in range(self.num_players)}
+        # Optional benefits awaiting the current player's accept/decline decision,
+        # in order, and the position (island index for the hospice, city index for
+        # the university) of the tile or building a colonist would go to. A
+        # position, not the object: the hand-rolled __deepcopy__ below rebuilds
+        # the boards, so an object reference would point outside the copy.
+        self.pending_benefits: List[Benefit] = []
+        self._benefit_target: Optional[int] = None
         self._hacienda_used = False
         self._colonists_ship_underfilled = False # Evaluated at end of Mayor phase
         
         # For sequential tracking within a phase
-        self._phase_turn_offset = 0  # 0 to num_players-1, denotes who goes next in the action circle
         self.players_taken_action = 0
 
         # Discarded plantations
         self.plantation_discard: List[TileType] = []
-
-        self.contention_blocked_production = 0
-        self.contention_blocked_trading = 0
-        self.contention_wasted_goods = 0
 
         self._setup_players()
 
@@ -111,7 +114,7 @@ class PuertoRicoGame:
     _CLONE_LIST_FIELDS = frozenset({
         "trading_house", "plantation_stack", "face_up_plantations",
         "plantation_discard", "available_roles", "roles_in_play",
-        "_craftsman_produced_kinds",
+        "_craftsman_produced_kinds", "pending_benefits",
     })
 
     def __deepcopy__(self, memo):
@@ -138,7 +141,7 @@ class PuertoRicoGame:
                 nd[k] = dict(v)
             elif k in cls._CLONE_LIST_FIELDS:
                 nd[k] = list(v)
-            elif k == "_captain_passed_players":
+            elif k in ("_captain_done", "_captain_declined"):
                 nd[k] = set(v)
             elif k == "_storage_assignments":
                 nd[k] = {i: {"windrose": a["windrose"],
@@ -334,6 +337,9 @@ class PuertoRicoGame:
 
     def select_role(self, player_idx: int, role: Role):
         """Player selects a role. Transitions game to that phase."""
+        self._require_no_pending_benefit()
+        if self.current_phase not in (None, Phase.END_ROUND):
+            raise ValueError("Roles are chosen only between phases.")
         if player_idx != self.current_player_idx:
             raise ValueError("Not this player's turn to pick a role!")
         if role not in self.available_roles:
@@ -359,19 +365,13 @@ class PuertoRicoGame:
             self.current_phase = Phase.SETTLER
         elif role == Role.MAYOR:
             self.current_phase = Phase.MAYOR
-            # Privilege: take 1 from supply
+            # Rulebook, Mayor: "The player who chooses this role may first take one
+            # colonist from the colonist supply (not from the colonist ship!) as
+            # the privilege." Optional, so it is offered before the distribution.
             if self.colonists_supply > 0:
-                p.unplaced_colonists += 1
-                self.colonists_supply -= 1
-            # Distribute colonists on ship immediately
-            idx = player_idx
-            while self.colonists_ship > 0:
-                self.players[idx].unplaced_colonists += 1
-                self.colonists_ship -= 1
-                idx = (idx + 1) % self.num_players
-            
-            # Recall all colonists for current player (strategy-based placement)
-            self.players[self.current_player_idx].recall_all_colonists()
+                self._offer_benefits([Benefit.MAYOR_PRIVILEGE])
+            else:
+                self._distribute_colonists()
 
         elif role == Role.BUILDER:
             self.current_phase = Phase.BUILDER
@@ -389,7 +389,8 @@ class PuertoRicoGame:
             self.current_phase = Phase.TRADER
         elif role == Role.CAPTAIN:
             self.current_phase = Phase.CAPTAIN
-            self._captain_passed_players = set()
+            self._captain_done = set()
+            self._captain_declined = set()
             self._wharf_used = {i: False for i in range(self.num_players)}
         elif role in (Role.PROSPECTOR_1, Role.PROSPECTOR_2):
             self.current_phase = Phase.PROSPECTOR
@@ -401,14 +402,16 @@ class PuertoRicoGame:
     def _advance_phase_turn(self):
         """Advances turn to next player in the current phase."""
         if self.current_phase == Phase.CAPTAIN:
-            if len(self._captain_passed_players) >= self.num_players:
+            # Loading ends once every player has taken their last turn or passed
+            # since the most recent load.
+            if len(self._captain_done | self._captain_declined) >= self.num_players:
                 self.current_phase = Phase.CAPTAIN_STORE
                 self.players_taken_action = 0
                 self.current_player_idx = self.active_role_player_idx()
                 self._storage_assignments = {i: {'windrose': None, 'warehouses': []} for i in range(self.num_players)}
             else:
                 self._next_player()
-                while self.current_player_idx in self._captain_passed_players:
+                while self.current_player_idx in self._captain_done:
                     self._next_player()
         elif self.current_phase == Phase.MAYOR:
             # Mayor phase: each player selects strategy once, then auto-fills
@@ -437,12 +440,71 @@ class PuertoRicoGame:
         """Returns the idx of the player who picked the current active role."""
         return self.active_role_player
 
+    def _require_no_pending_benefit(self):
+        if self.pending_benefits:
+            raise ValueError(f"A {self.pending_benefits[0].name} decision is pending.")
+
+    def _offer_benefits(self, benefits: List[Benefit], target: Optional[int] = None):
+        """Queue optional benefits for the current player. Play resumes once
+        resolve_benefit has settled every one of them."""
+        self.pending_benefits = list(benefits)
+        self._benefit_target = target
+
+    def resolve_benefit(self, player_idx: int, accept: bool):
+        """Accept or decline the first pending benefit, then continue the phase
+        once none remains. Declining has no effect (a declined captain's
+        privilege is used up all the same: it belongs to the first load)."""
+        if not self.pending_benefits or player_idx != self.current_player_idx:
+            raise ValueError("No benefit decision is pending for this player.")
+        benefit = self.pending_benefits.pop(0)
+        p = self.players[player_idx]
+        if accept:
+            if benefit == Benefit.MAYOR_PRIVILEGE:
+                # From the supply, never from the ship.
+                p.unplaced_colonists += 1
+                self.colonists_supply -= 1
+            elif benefit in (Benefit.HOSPICE, Benefit.UNIVERSITY):
+                # "If there are no more colonists in the colonist supply, the player
+                # may take one from the colonist ship."
+                if self.colonists_supply > 0:
+                    self.colonists_supply -= 1
+                else:
+                    self.colonists_ship -= 1
+                if benefit == Benefit.HOSPICE:
+                    p.island_board[self._benefit_target].is_occupied = True
+                else:
+                    p.city_board[self._benefit_target].colonists += 1
+            else:
+                # Captain's privilege or harbor: +1 VP. The VP supply may go
+                # negative ("track them with pencil and paper").
+                self.vp_chips -= 1
+                p.add_vp(1)
+        if self.pending_benefits:
+            return
+        self._benefit_target = None
+        if benefit == Benefit.MAYOR_PRIVILEGE:
+            self._distribute_colonists()
+        else:
+            self._advance_phase_turn()
+
+    def _distribute_colonists(self):
+        """Mayor: the colonists on the ship go one at a time to each player,
+        starting with the mayor; the mayor's placement turn then starts with all
+        of their colonists back on the windrose."""
+        idx = self.active_role_player
+        while self.colonists_ship > 0:
+            self.players[idx].unplaced_colonists += 1
+            self.colonists_ship -= 1
+            idx = (idx + 1) % self.num_players
+        self.players[self.current_player_idx].recall_all_colonists()
+
     def action_mayor_place_colonist(self, player_idx: int, is_city: bool, slot_idx: int):
         """
         Place a single colonist into an empty slot on the island or city.
         The phase automatically advances if the player runs out of colonists 
         or has no more valid empty slots.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.MAYOR or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Mayor phase.")
             
@@ -522,9 +584,6 @@ class PuertoRicoGame:
             
             kinds_produced = []
             for g in Good:
-                if production[g] > self.goods_supply[g]:
-                    self.contention_blocked_production += (production[g] - self.goods_supply[g])
-                    
                 amount = min(production[g], self.goods_supply[g])
                 if amount > 0:
                     p.add_good(g, amount)
@@ -546,6 +605,7 @@ class PuertoRicoGame:
         Craftsman picks their 1 extra privilege good after everyone has auto-produced.
         If they pass, privilege_good is None.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CRAFTSMAN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Craftsman phase.")
             
@@ -570,6 +630,7 @@ class PuertoRicoGame:
         """
         sell_good: Good to sell, or None to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.TRADER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Trader phase.")
             
@@ -587,15 +648,6 @@ class PuertoRicoGame:
                 raise ValueError("Trading house already has this good and player has no Office.")
                 
             # Process sale
-            from puerto_rico.constants import GOOD_PRICES
-            
-            # Check for forced down-sell contention
-            for g, count in p.goods.items():
-                if count > 0 and GOOD_PRICES[g] > GOOD_PRICES[sell_good]:
-                    if g in self.trading_house and not has_office:
-                        self.contention_blocked_trading += 1
-                        break
-            
             price = GOOD_PRICES[sell_good]
             
             if has_privilege:
@@ -608,22 +660,6 @@ class PuertoRicoGame:
             p.remove_good(sell_good, 1)
             p.add_doubloons(price)
             self.trading_house.append(sell_good)
-            
-        else:
-            p = self.players[player_idx]
-            if sum(p.goods.values()) > 0:
-                if len(self.trading_house) >= 4:
-                    self.contention_blocked_trading += 1
-                else:
-                    has_office = p.is_building_occupied(BuildingType.OFFICE)
-                    blocked = True
-                    for g, count in p.goods.items():
-                        if count > 0:
-                            if not (g in self.trading_house and not has_office):
-                                blocked = False
-                                break
-                    if blocked:
-                        self.contention_blocked_trading += 1
 
         self._advance_phase_turn()
 
@@ -632,6 +668,7 @@ class PuertoRicoGame:
         Allows a player with an occupied Hacienda to draw a face-down plantation tile.
         This does not end their turn. They must still call action_settler afterwards.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.SETTLER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Settler phase.")
         p = self.players[player_idx]
@@ -654,6 +691,7 @@ class PuertoRicoGame:
         Set to -1 to take Quarry (if privilege or construction hut).
         Set to -2 to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.SETTLER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Settler phase.")
             
@@ -686,21 +724,21 @@ class PuertoRicoGame:
             else:
                 raise ValueError("Invalid plantation choice.")
                 
-        # Hospice check ONLY applies to the officially drafted tile
-        if tile_placed and p.is_building_occupied(BuildingType.HOSPICE):
-            if self.colonists_supply > 0:
-                p.island_board[-1].is_occupied = True
-                self.colonists_supply -= 1
-            elif self.colonists_ship > 0:
-                p.island_board[-1].is_occupied = True
-                self.colonists_ship -= 1
-                
+        # Rulebook, Hospice: "they may take a colonist from the colonist supply and
+        # place it on the newly acquired plantation or quarry tile" -- optional,
+        # and only for this regular tile, never for the hacienda's extra tile.
+        if (tile_placed and p.is_building_occupied(BuildingType.HOSPICE)
+                and (self.colonists_supply > 0 or self.colonists_ship > 0)):
+            self._offer_benefits([Benefit.HOSPICE], target=len(p.island_board) - 1)
+            return
+
         self._advance_phase_turn()
 
     def action_builder(self, player_idx: int, building_choice: Optional[BuildingType]):
         """
         building_choice: The building to build. None to pass.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.BUILDER or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Builder phase.")
             
@@ -731,25 +769,24 @@ class PuertoRicoGame:
             p.build_building(building_choice)
             self.building_supply[building_choice] -= 1
             
-            # University — official rule (Deluxe rulebook, University): the free
-            # colonist goes "on the newly acquired tile", and "if there are no
-            # more colonists in the colonist supply, they may take one from the
-            # colonist ship. If there are also none there, they take none."
-            if p.is_building_occupied(BuildingType.UNIVERSITY):
+            # University — official rule (Deluxe rulebook, University): the owner
+            # "may take a colonist from the colonist supply and place it on the
+            # newly acquired tile", and "if there are no more colonists in the
+            # colonist supply, they may take one from the colonist ship. If there
+            # are also none there, they take none." Optional, so it is offered.
+            # A university built just now has no colonist and does not apply.
+            if (p.is_building_occupied(BuildingType.UNIVERSITY)
+                    and (self.colonists_supply > 0 or self.colonists_ship > 0)):
                 # Target the building just built, NOT city_board[-1]: a large
                 # building appends (building, OCCUPIED_SPACE), so the last entry
                 # is the dummy second space. Putting the colonist there leaves
                 # the large building unstaffed and silently forfeits its
                 # end-game bonus until the next Mayor redistribution.
-                new_slot = next(b for b in reversed(p.city_board)
-                                if b.building_type == building_choice)
-                if self.colonists_supply > 0:
-                    new_slot.colonists += 1
-                    self.colonists_supply -= 1
-                elif self.colonists_ship > 0:
-                    new_slot.colonists += 1
-                    self.colonists_ship -= 1
-                    
+                new_slot = next(i for i in range(len(p.city_board) - 1, -1, -1)
+                                if p.city_board[i].building_type == building_choice)
+                self._offer_benefits([Benefit.UNIVERSITY], target=new_slot)
+                return
+
         self._advance_phase_turn()
 
     def action_captain_load(self, player_idx: int, ship_idx: int, good_type: Good):
@@ -758,25 +795,29 @@ class PuertoRicoGame:
         The engine then computes VPs.
         If player has Wharf, ship_idx can be -1 (imaginary ship).
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CAPTAIN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain phase.")
             
         p = self.players[player_idx]
-        has_privilege = (player_idx == self.active_role_player_idx())
-        
+
         amount = p.goods[good_type]
         if amount == 0:
             raise ValueError("Player has no goods of this type.")
             
-        is_wharf = False
-        if ship_idx == -1:
+        is_wharf = ship_idx == -1
+        if is_wharf:
             if not p.is_building_occupied(BuildingType.WHARF):
                 raise ValueError("Player does not have occupied Wharf for imaginary ship.")
-            # Assume wharf is single use per captain phase. This needs tracking if we want to be strict,
-            # but usually you just use it once. Let's assume it's valid.
+            # Checked before anything changes (it used to come after the captain's
+            # privilege had already been marked as used).
+            if self._wharf_used.get(player_idx, False):
+                raise ValueError("Wharf can only be used once per Captain phase.")
+            # Rulebook, Wharf: all goods of the kind, whatever the cargo ships carry.
             loaded_amount = amount
-            is_wharf = True
         else:
+            if not 0 <= ship_idx < len(self.cargo_ships):
+                raise ValueError("Invalid cargo ship index.")
             ship = self.cargo_ships[ship_idx]
             if ship.is_full:
                 raise ValueError("Ship is full.")
@@ -812,38 +853,44 @@ class PuertoRicoGame:
             ship.current_load += loaded_amount
             ship.good_type = good_type
             
-        # VPs
-        points_earned = loaded_amount
-        if has_privilege and not getattr(self, '_captain_privilege_used', False):
-            points_earned += 1
-            self._captain_privilege_used = True
-            
         if is_wharf:
-            if self._wharf_used.get(player_idx, False):
-                raise ValueError("Wharf can only be used once per Captain phase.")
             self._wharf_used[player_idx] = True
-            
-        if p.is_building_occupied(BuildingType.HARBOR):
-            points_earned += 1
-            
-        self.vp_chips -= points_earned # May go negative, which indicates triggered game end
-        p.add_vp(points_earned) # Players earn VP even if VP chips are exhausted
-        
+
+        # 1 VP per good loaded. "When the VP chips are exhausted, players earning VP
+        # thereafter should track them with pencil and paper": chip depletion only
+        # triggers the end (check_game_end), so the supply may go negative.
+        self.vp_chips -= loaded_amount
+        p.add_vp(loaded_amount)
+
         p.remove_good(good_type, loaded_amount)
         if is_wharf:
             self.goods_supply[good_type] += loaded_amount # Wharf goods return to supply immediately
-        
-        # In actual Puerto Rico, a player MUST load if they can.
-        # So instead of immediately advancing, the player's turn continues until they can't load.
-        # But for RL MDP, it's easier to: Action -> State update. 
-        # Player MUST pick a valid load action, or a PASS action. If they pick PASS while they can load,
-        # the env raises an error or penalizes them.
+
+        # Any load gives the players who passed with a usable wharf another turn.
+        self._captain_declined.clear()
+
+        # The captain's privilege (+1 VP with the first load, a wharf load
+        # included) and then the harbor (+1 VP with every load) are optional
+        # benefits: "they may choose not to use the action or privilege of the
+        # placard chosen", and "Players are not required to use the special
+        # function of an occupied beige building if they do not want to".
+        benefits = []
+        if player_idx == self.active_role_player_idx() and not self._captain_privilege_used:
+            self._captain_privilege_used = True
+            benefits.append(Benefit.CAPTAIN_PRIVILEGE)
+        if p.is_building_occupied(BuildingType.HARBOR):
+            benefits.append(Benefit.HARBOR)
+        if benefits:
+            self._offer_benefits(benefits)
+            return
+
         self._advance_phase_turn()
 
     def action_captain_pass(self, player_idx: int):
         """
         Player indicates they can no longer load any goods.
         """
+        self._require_no_pending_benefit()
         if self.current_phase != Phase.CAPTAIN or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain phase.")
             
@@ -873,9 +920,39 @@ class PuertoRicoGame:
         
         if can_load_anything:
             raise ValueError("Rule Violation: Player MUST load if they have valid goods and ship capacity.")
-            
-        self._captain_passed_players.add(player_idx)
+
+        # Rulebook, Wharf: "the player may choose when to use it, if at all", so a
+        # pass forfeits further turns only when the wharf is not an option. A
+        # player who passes with a usable wharf keeps their place and gets another
+        # turn if anyone loads after the pass.
+        can_still_use_wharf = (p.is_building_occupied(BuildingType.WHARF)
+                               and not self._wharf_used.get(player_idx, False)
+                               and any(p.goods[g] > 0 for g in Good))
+        if can_still_use_wharf:
+            self._captain_declined.add(player_idx)
+        else:
+            self._captain_done.add(player_idx)
         self._advance_phase_turn()
+
+    @staticmethod
+    def warehouse_slots(p) -> int:
+        """Kinds the player's occupied warehouses keep in full: one for the small, two
+        for the large warehouse."""
+        return ((1 if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE) else 0)
+                + (2 if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE) else 0))
+
+    @classmethod
+    def goods_all_fit(cls, p) -> bool:
+        """Whether every good the player holds can be kept: at most as many kinds as
+        warehouse slots, or exactly one kind more when one of the kinds is a single
+        good (it goes on the windrose). Rulebook, Captain: players "must store the
+        goods left on their windroses", and only "when players cannot store all their
+        extra goods, they may choose which goods to store" -- so goods that fit are
+        kept, without a decision."""
+        kinds = [g for g in Good if p.goods[g] > 0]
+        slots = cls.warehouse_slots(p)
+        return len(kinds) <= slots or (
+            len(kinds) == slots + 1 and any(p.goods[g] == 1 for g in kinds))
 
     def action_captain_store_windrose(self, player_idx: int, good_type: Good):
         """
@@ -887,6 +964,8 @@ class PuertoRicoGame:
         p = self.players[player_idx]
         if p.goods[good_type] == 0:
             raise ValueError(f"Player does not have {good_type.name}.")
+        if self.goods_all_fit(p):
+            raise ValueError("All goods fit, so they are all kept; there is nothing to choose.")
             
         if self._storage_assignments[player_idx]['windrose'] is not None:
             raise ValueError("Windrose slot is already occupied.")
@@ -906,14 +985,10 @@ class PuertoRicoGame:
         p = self.players[player_idx]
         if p.goods[good_type] == 0:
             raise ValueError(f"Player does not have {good_type.name}.")
+        if self.goods_all_fit(p):
+            raise ValueError("All goods fit, so they are all kept; there is nothing to choose.")
             
-        max_wh_slots = 0
-        if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE):
-            max_wh_slots += 1
-        if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE):
-            max_wh_slots += 2
-            
-        if len(self._storage_assignments[player_idx]['warehouses']) >= max_wh_slots:
+        if len(self._storage_assignments[player_idx]['warehouses']) >= self.warehouse_slots(p):
             raise ValueError("All warehouse slots are already used.")
             
         if good_type in self._storage_assignments[player_idx]['warehouses']:
@@ -926,23 +1001,22 @@ class PuertoRicoGame:
 
     def action_captain_store_pass(self, player_idx: int):
         """
-        Finalize storage. Discard unstored goods.
-        Must not voluntarily discard if space is available.
+        Finalize storage. Keep everything if it all fits; otherwise discard the
+        unassigned goods, which is legal only once every storage slot holds a kind.
         """
         if self.current_phase != Phase.CAPTAIN_STORE or self.current_player_idx != player_idx:
             raise ValueError("Not this player's turn in Captain Store phase.")
             
         p = self.players[player_idx]
         assign = self._storage_assignments[player_idx]
+        if self.goods_all_fit(p):
+            self._advance_phase_turn()
+            return
         
         unstored_types = [g for g in Good if p.goods[g] > 0 and g != assign['windrose'] and g not in assign['warehouses']]
         
-        max_wh_slots = 0
-        if p.is_building_occupied(BuildingType.SMALL_WAREHOUSE): max_wh_slots += 1
-        if p.is_building_occupied(BuildingType.LARGE_WAREHOUSE): max_wh_slots += 2
-        
         has_empty_windrose = (assign['windrose'] is None)
-        has_empty_wh = len(assign['warehouses']) < max_wh_slots
+        has_empty_wh = len(assign['warehouses']) < self.warehouse_slots(p)
         
         if len(unstored_types) > 0:
             if has_empty_windrose or has_empty_wh:
@@ -959,7 +1033,6 @@ class PuertoRicoGame:
                 
             discard = p.goods[g] - keep
             if discard > 0:
-                self.contention_wasted_goods += discard
                 p.remove_good(g, discard)
                 self.goods_supply[g] += discard
                 

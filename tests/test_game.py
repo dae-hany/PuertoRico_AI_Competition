@@ -7,19 +7,40 @@ def test_obs_and_mask_shapes():
     env = make_env(seed=0)
     obs = env.observe(env.agent_selection)
     flat = flatten_observation(obs["observation"])
-    assert flat.shape == (OBS_DIM,)             # 3p track: 74 + 73*3 = 293
+    assert flat.shape == (OBS_DIM,)             # 3p track: 79 + 73*3 = 298
     assert flat.dtype == np.float32
     assert np.asarray(obs["action_mask"]).shape == (ACTION_DIM,)
 
 
 def test_obs_shape_2p_track():
-    # The 2p (1-vs-1) track drops one per-player block: 74 + 73*2 = 220.
+    # The 2p (1-vs-1) track drops one per-player block: 79 + 73*2 = 225.
     # The action space is unchanged at 200.
     env = make_env(seed=0, num_players=2)
     obs = env.observe(env.agent_selection)
     flat = flatten_observation(obs["observation"])
-    assert flat.shape == (220,)
+    assert flat.shape == (225,)
     assert np.asarray(obs["action_mask"]).shape == (ACTION_DIM,)
+
+
+def test_observation_offsets_match_the_env_layout():
+    """The constants in puerto_rico/observation.py are what agents index the
+    flat vector with; they must sit where flatten_observation puts the fields."""
+    from puerto_rico import observation as ob
+
+    for n in (2, 3):
+        env = make_env(seed=0, num_players=n)
+        raw = env.observe(env.agent_selection)["observation"]
+        offsets, at = {}, 0
+        for key in sorted(raw["global_state"]):
+            offsets[key] = at
+            at += raw["global_state"][key].size
+        assert at == ob.GLOBAL_DIM
+        assert offsets["current_player"] == ob.CURRENT_PLAYER_OFFSET
+        assert offsets["governor_idx"] == ob.GOVERNOR_IDX_OFFSET
+        assert offsets["pending_benefit"] == ob.PENDING_BENEFIT_OFFSET
+        block = sum(v.size for v in raw["players"]["player_0"].values())
+        assert block == ob.PER_PLAYER_DIM
+        assert flatten_observation(raw).shape == (ob.GLOBAL_DIM + ob.PER_PLAYER_DIM * n,)
 
 
 def test_random_game_completes_with_valid_scores():
@@ -69,14 +90,16 @@ def test_same_seed_is_reproducible():
 
 
 def _advance_to_mayor(env, rng, limit=4000):
-    """Play legal random moves until a Mayor-phase decision is on the table."""
+    """Play legal random moves until a Mayor-phase placement is on the table
+    (past the mayor's privilege decision, which comes first)."""
     from puerto_rico.constants import Phase
     for _ in range(limit):
         name = env.agent_selection
         if env.terminations.get(name, False) or env.truncations.get(name, False):
             env.step(None)
             continue
-        if env.unwrapped.game.current_phase == Phase.MAYOR:
+        game = env.unwrapped.game
+        if game.current_phase == Phase.MAYOR and not game.pending_benefits:
             return True
         mask = np.asarray(env.observe(name)["action_mask"])
         legal = np.where(mask > 0.5)[0]
@@ -105,7 +128,7 @@ def test_mayor_turn_always_has_a_legal_move():
             game = env.unwrapped.game
             mask = np.asarray(env.observe(name)["action_mask"])
             legal = np.where(mask > 0.5)[0]
-            if game.current_phase == Phase.MAYOR:
+            if game.current_phase == Phase.MAYOR and not game.pending_benefits:
                 p = game.players[game.current_player_idx]
                 assert legal.size > 0, "Mayor phase handed out an empty action mask"
                 assert p.unplaced_colonists > 0

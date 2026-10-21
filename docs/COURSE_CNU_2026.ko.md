@@ -40,9 +40,10 @@
   값입니다.
 - 함께 제공되는 baseline 에이전트와도 대전하지만, 그 결과는 **참고용으로 따로**
   공개합니다. 대전하는 baseline은 Random, Factory, ShippingRush,
-  TradeBuilding, ActionValue, SearchLite, PPO이며, 이 중 PPO가 가장 강합니다
+  TradeBuilding, ActionValue, SearchLite, PPO입니다
   ([아래](#방법은-자유이지만-rl을-권장합니다) 참고). 이 결과를 보고 자신의
-  에이전트가 어느 수준인지 가늠할 수 있습니다.
+  에이전트가 어느 수준인지 가늠할 수 있으며, baseline끼리 비교한 강도는
+  [BASELINES.md](BASELINES.md)에 측정 결과로 정리되어 있습니다.
 - 승수와 등수를 점수에 반영하는 세부 방식은 **추후 공지**합니다.
 - RL 사용 여부에 따른 **가감점은 없습니다**.
 
@@ -140,14 +141,15 @@ self-play, 탐색 안에서 사용하는 학습한 가치 평가)를 넣기를 �
 않습니다.
 
 학습을 마친 2p PPO 체크포인트(`training/checkpoints/ppo_baseline_2p.pt`)를
-함께 제공하며, 이 체크포인트는 2p에서 가장 강한 기준선입니다. `Search`를
-상대로 대략 세 판 중 두 판을 이깁니다. 이 체크포인트는 트레이너의 기본 설정으로
-self-play만 수행해서 얻은 결과이며, CPU로 1.6시간이 걸렸습니다. 측정 수치와
-학습 곡선은 [training/README.md](../training/README.md)에 정리되어 있습니다.
+함께 제공합니다. 이 체크포인트가 `Search`를 비롯한 다른 baseline을 상대로
+어떤 성적을 내는지는 [BASELINES.md](BASELINES.md)에 측정 결과로 정리되어
+있습니다. 이 체크포인트는 트레이너의 기본 설정으로 self-play만 수행해서 얻은
+결과이며, CPU 스레드 8개로 학습하는 데 약 2시간이 걸렸습니다. 학습 명령은
+[training/README.md](../training/README.md)에 정리되어 있습니다.
 [`examples/ppo_entry/`](../examples/ppo_entry/)에는 이 체크포인트를 사용하는
 완성된 엔트리가 제출 형식(`my_agent.py` + `weights.pt`) 그대로 들어 있습니다.
 이 엔트리에서 출발해도 되지만, 보고서에는 **무엇을 왜 바꿨는지, 그리고 그
-변경으로 성능이 얼마나 좋아졌는지**를 반드시 적어야 합니다. 기준선을 그대로
+변경으로 성능이 얼마나 좋아졌는지**를 반드시 적어야 합니다. baseline을 그대로
 다시 제출한 엔트리는 보고서에 적을 내용이 없습니다. [README](../README.md)의
 "Recommended approach" 절과 [SEARCH_BASELINE_2P.md](SEARCH_BASELINE_2P.md)도
 참고하세요.

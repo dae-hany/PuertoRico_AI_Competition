@@ -9,30 +9,34 @@ mask (1 = legal, 0 = illegal).
 Its length is ``GLOBAL_DIM + PER_PLAYER_DIM * num_players``, so it depends on the
 track::
 
-    2p (1-vs-1):  74 + 73*2 = 220
-    3p:           74 + 73*3 = 293   (== OBS_DIM)
+    2p (1-vs-1):  79 + 73*2 = 225
+    3p:           79 + 73*3 = 298   (== OBS_DIM)
 
 Flat layout::
 
-    [ global(74) | player_0(73) | player_1(73) | ... ]
+    [ global(79) | player_0(73) | player_1(73) | ... ]
 
 Within each block the sub-features are concatenated in *sorted key order*.
-This exact ordering is the one the bundled PPO checkpoints were trained on, so
-it must not change. The action space is a fixed ``Discrete(200)`` in both tracks.
-See ``docs/OBSERVATION_AND_ACTIONS.md`` for the full field map.
+Networks trained on this vector depend on that ordering, so changing it means
+retraining them. It last changed on 2026-10-21, when the global block gained
+``pending_benefit`` (5 values at offsets 50-54, between ``governor_idx`` and
+``quarry_stack``) for the accept/decline decisions (actions 170/171); a
+checkpoint trained before then takes 220 (2p) or 293 (3p) inputs. The action
+space is a fixed ``Discrete(200)`` in both tracks. See
+``docs/OBSERVATION_AND_ACTIONS.md`` for the full field map.
 """
 import numpy as np
 
-GLOBAL_DIM = 74        # global-state features
+GLOBAL_DIM = 79        # global-state features
 PER_PLAYER_DIM = 73    # per-player features
-OBS_DIM = 293          # flattened observation length for the 3p track (74 + 73*3)
+OBS_DIM = 298          # flattened observation length for the 3p track (79 + 73*3)
 ACTION_DIM = 200       # number of discrete actions (same in every track)
 
-# Offsets of the two absolute-player-indexed fields inside the global block.
-# Both are derived from the sorted-key ordering documented above; the module-level
-# self-check at the bottom of this file asserts they stay in sync with the env.
+# Offsets of fields inside the global block, from the sorted-key ordering
+# documented above (tests/test_game.py checks them against the env's layout).
 CURRENT_PLAYER_OFFSET = 36   # global_state["current_player"]
 GOVERNOR_IDX_OFFSET   = 49   # global_state["governor_idx"]
+PENDING_BENEFIT_OFFSET = 50  # global_state["pending_benefit"], one-hot over Benefit
 
 
 def flatten_observation(obs_dict: dict) -> np.ndarray:
@@ -44,7 +48,7 @@ def flatten_observation(obs_dict: dict) -> np.ndarray:
 
     Returns:
         ``np.ndarray`` of shape ``(GLOBAL_DIM + PER_PLAYER_DIM * num_players,)``
-        — ``(220,)`` in the 2p track, ``(293,)`` in the 3p track — dtype ``float32``.
+        — ``(225,)`` in the 2p track, ``(298,)`` in the 3p track — dtype ``float32``.
     """
     flat = []
 

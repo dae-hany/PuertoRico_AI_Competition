@@ -59,6 +59,10 @@ def _state_fingerprint(env, obs, mask):
         game.quarry_stack,
         tuple(game.trading_house),
         tuple(sorted(game.building_supply.items())),
+        tuple(game.pending_benefits),
+        game._benefit_target,
+        tuple(sorted(game._captain_done)),
+        tuple(sorted(game._captain_declined)),
     )
 
 

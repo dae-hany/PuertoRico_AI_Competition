@@ -6,79 +6,29 @@ and the tournament. It needs PyTorch: `pip install -e ".[rl]"`.
 
 The trainer works for **either track**: `--num_players 3` (default) or
 `--num_players 2`. The observation width follows from the seat count
-(`74 + 73 × num_players`, so 293 or 220), and `PpoAgent` reads that width back
+(`79 + 73 × num_players`, so 298 or 225), and `PpoAgent` reads that width back
 out of the checkpoint — but **a checkpoint only plays the track it was trained
 on**. One checkpoint per track is bundled, both from the full-run command below
 with default settings (5M steps of parameter-sharing self-play, seed 42):
 
 | Checkpoint | Track | Training time |
 |---|---|---|
-| `checkpoints/ppo_baseline_2p.pt` | 2p | 1.6 h on CPU (`--device cpu`, ~860 steps/s) |
-| `checkpoints/ppo_baseline.pt` | 3p | ~2.6 h on 8 CPU threads |
+| `checkpoints/ppo_baseline_2p.pt` | 2p | 2.0 h on 8 CPU threads (`--device cpu`, ~690 steps/s) |
+| `checkpoints/ppo_baseline.pt` | 3p | 2.0 h on 8 CPU threads (`--device cpu`, ~690 steps/s) |
 
-The registry's `PPO` baseline loads both and plays whichever track it is seated
-in.
+(The two ran side by side on a shared AMD Threadripper PRO 5995WX.) The
+registry's `PPO` baseline loads both and plays whichever track it is seated in.
+Both were retrained on 2026-10-21, when the observation grew and the
+accept/decline decisions were added ([`../CHANGES.md`](../CHANGES.md)).
 
-### 2p: the strongest bundled agent
-
-Greedy play, seat-balanced, under the entrant's 0.1 s rule (through
-[`../examples/ppo_entry/`](../examples/ppo_entry/); about 0.5 ms a move):
-
-| 2p PPO vs | win rate | games |
-|---|---:|---:|
-| `SearchAgent` (1500 nodes) | **67.5%** (95% CI [0.60, 0.74]) | 160 |
-| `SearchLiteAgent` (250 nodes) | 80% | 40 |
-| `MctsAgent` (60 simulations) | 89% | 40 |
-| every heuristic | 100% | 24 each |
-
-The heuristic row comes from [`../docs/BASELINES.md`](../docs/BASELINES.md). The
-planner rows come from `tools/play.py --agent examples/ppo_entry/my_agent.py
---vs SearchLite,Search,MCTS --games 40`, plus four 30-game runs against
-`Search` at `--seed` 10000, 20000, 30000 and 40000.
-
-It gets there fast. The same run's intermediate checkpoints
-(`--ckpt_interval 250000`), 40 games per cell, same setup:
-
-| steps | Factory | TradeBuilding | ActionValue | ShippingRush | Search |
-|---:|---:|---:|---:|---:|---:|
-| 262k | 20% | 78% | 28% | 75% | 0% |
-| 508k | 70% | 88% | 50% | 100% | 25% |
-| 754k | 92% | 98% | 70% | 100% | 39% |
-| 1.02M | 80% | 86% | 75% | 100% | 38% |
-| 1.26M | 92% | 82% | 82% | 92% | 40% |
-| 1.51M | 96% | 98% | 68% | 100% | 50% |
-| 5.01M (bundled) | 100% | 98% | 98% | 100% | 65% |
-
-So plain self-play PPO, with no search and no reward shaping, outplays
-alpha-beta search in this game. Treat it as a starting point rather than a
-ceiling: the network's policy and value can also guide a search, and fine-tuning
-against the opponents it still loses to is another way up.
-
-### 3p
-
-`checkpoints/ppo_baseline.pt` against each heuristic, greedy play,
-seat-balanced, 24 games per matchup:
-
-| PPO vs 2× | win rate |
-|---|---:|
-| `RandomAgent` | 100% |
-| `FactoryAgent` | 100% |
-| `TradeBuildingAgent` | 100% |
-| `ShippingRushAgent` | 83% |
-| `ActionValueAgent` | 83% |
-
-An agent of average strength wins ≈ 33.3% of 3-player games, so PPO is the agent
-to beat in the 3p track. These numbers come from
-[`../docs/BASELINES.md`](../docs/BASELINES.md); regenerate them with
-`python tools/measure_baselines.py` after changing anything that could move
-them. (The table published before that tool existed was measured on an engine
-and a set of baselines that have since been corrected — see
-[`../CHANGES.md`](../CHANGES.md) — so it is not comparable.)
-
-For head-to-head numbers against `MctsAgent` — and for every other baseline
-pairing — see [`../docs/BASELINES.md`](../docs/BASELINES.md), which
-`tools/measure_baselines.py` regenerates. MCTS is quoted there **with its search
-budget**, because that is what defines its strength.
+**How strong they are** — each against every other baseline, in 2p the search
+agents included — is measured in [`../docs/BASELINES.md`](../docs/BASELINES.md)
+and kept only there; `python tools/measure_baselines.py` regenerates it after
+anything that could move it changes. MCTS is quoted there **with its search
+budget**, because that is what defines its strength. Treat the bundled network
+as a starting point rather than a ceiling: its policy and value can also guide
+a search, and fine-tuning against the opponents it still loses to is another
+way up.
 
 ## Train
 
@@ -89,11 +39,11 @@ python training/train_ppo.py --total_timesteps 200000 --num_envs 4 \
 ```
 
 ```bash
-# The full run that produced the bundled baselines (the 2p one added
-# --num_players 2 --device cpu --out_dir results/ppo_2p):
-python training/train_ppo.py --total_timesteps 5000000 --num_envs 8 \
-    --eval_interval 250000 --ckpt_interval 250000 --eval_episodes 100 \
-    --out_dir results/ppo_v3
+# The full run that produced the bundled 2p baseline (the 3p one used
+# --num_players 3 --out_dir results/ppo_3p_v4):
+OMP_NUM_THREADS=8 python training/train_ppo.py --total_timesteps 5000000 \
+    --num_envs 8 --eval_interval 250000 --ckpt_interval 250000 \
+    --eval_episodes 100 --num_players 2 --device cpu --out_dir results/ppo_2p_v4
 ```
 
 Checkpoints are written to `<out_dir>/checkpoints/ckpt_*.pt` as
@@ -101,14 +51,15 @@ Checkpoints are written to `<out_dir>/checkpoints/ckpt_*.pt` as
 alongside them: `training_log.csv` (one row per PPO update, including
 `approx_kl`, `clipfrac` and `illegal_ends`) and `eval_log.csv` (win rate vs
 `RandomBot`s in the other seats, reported both greedily and with sampling). In
-2p that number reaches 100% within ~0.5M steps, long before the policy stops
-improving, so measure a checkpoint against the baselines with `tools/play.py`.
+both tracks that number reaches 100% within ~1M steps, long before the policy
+stops improving, so measure a checkpoint against the baselines with
+`tools/play.py`.
 
 ## Play your trained agent
 
 ```python
 from agents.ppo_agent import PpoAgent
-agent = PpoAgent("results/ppo_v3/checkpoints/ckpt_final.pt")
+agent = PpoAgent("results/ppo_2p_v4/checkpoints/ckpt_final.pt")
 
 # one checkpoint per track: the agent picks by observation length
 agent = PpoAgent(["training/checkpoints/ppo_baseline_2p.pt",
@@ -121,10 +72,11 @@ from its own folder, as the weight-file rule requires.
 
 `PpoAgent` loads the network and plays greedily (highest-probability legal move).
 It reads the `egocentric` flag out of the checkpoint and applies the matching
-observation rotation, so training and play always agree. A checkpoint saved
-before the rotation existed has no such flag and is read back as absolute-seat,
-so old and new weights both keep playing correctly — but they are *different*
-encodings, and weights cannot be mixed between them.
+observation rotation, so training and play always agree; a network trained with
+`--no_egocentric` is read back in absolute seat order. The two are *different*
+encodings, and weights cannot be mixed between them. A checkpoint trained
+before 2026-10-21 expects the old 220/293-value observation: `PpoAgent` refuses
+it with a message to retrain it.
 
 ## How the trainer handles self-play
 
@@ -161,7 +113,8 @@ argument does not hold up — the bootstrapped critic carries the signal past th
 | 200k | **0.99 win / 51.6 VP** | 0.98 win / 47.9 VP |
 
 (win rate = greedy play as player 0 against two `RandomBot`s, 100 games; a random
-policy scores ≈ 0.33.)
+policy scores ≈ 0.33. Measured on the engine before the 2026-10-21 rule
+changes.)
 
 ## Files
 

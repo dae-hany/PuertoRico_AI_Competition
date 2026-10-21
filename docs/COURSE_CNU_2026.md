@@ -37,9 +37,10 @@ The final project's 40% splits in two:
   or a loss (0); your **wins** are your wins plus half your draws.
 - The bundled baselines are played too, and their results are published
   **separately, for reference only**: Random, Factory, ShippingRush,
-  TradeBuilding, ActionValue, SearchLite and PPO (the strongest of them, see
-  [below](#anything-goes-but-learning-is-recommended)), so you can see where
-  your agent stands.
+  TradeBuilding, ActionValue, SearchLite and PPO (see
+  [below](#anything-goes-but-learning-is-recommended); how they compare is
+  measured in [BASELINES.md](BASELINES.md)), so you can see where your agent
+  stands.
 - How the wins and the rank are turned into points will be **announced later**.
 - There is **no bonus or penalty** for using, or not using, reinforcement
   learning.
@@ -138,11 +139,11 @@ evaluation inside a search) is recommended, but other methods are **not
 penalized**, and no points are given for the name of an algorithm.
 
 A trained 2p PPO checkpoint is bundled
-(`training/checkpoints/ppo_baseline_2p.pt`), and it is the strongest 2p
-baseline: it beats `Search` in about two games of three. Plain self-play with
-the trainer's default settings produced it in 1.6 h on a CPU
-([training/README.md](../training/README.md) has the numbers and the learning
-curve). [`examples/ppo_entry/`](../examples/ppo_entry/) is a complete entry
+(`training/checkpoints/ppo_baseline_2p.pt`); how it fares against `Search` and
+every other baseline is measured in [BASELINES.md](BASELINES.md). Plain
+self-play with the trainer's default settings produced it in about 2 h on 8
+CPU threads ([training/README.md](../training/README.md) has the command).
+[`examples/ppo_entry/`](../examples/ppo_entry/) is a complete entry
 built on it, in the submission layout (`my_agent.py` + `weights.pt`). You may
 start from it, but your write-up must say **what you changed and why, and how
 much it helped**: an entry that only resubmits the baseline has nothing to

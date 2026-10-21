@@ -95,3 +95,24 @@ def test_strong_agent_outranks_random_in_both_tracks():
                              n_seats=n_seats)
         order = [row["agent"] for row in build_leaderboard(res)]
         assert order.index("ActionValue") < order.index("Random")
+
+
+def _ranked(seats, ranks):
+    return {"agents": list(seats), "result": {"ranks": list(ranks)}}
+
+
+def test_trueskill_skips_games_that_seat_an_agent_twice():
+    """TrueSkill models every seat as a different player. Rating [A, A, B] seat
+    by seat kept only the last of A's two updates and let the scale drift, so
+    such games are left out of it (the win rate still counts them)."""
+    import itertools
+    from tournament.rankers.trueskill_ranker import rank_trueskill
+
+    names = ["A", "B", "C"]
+    distinct = [_ranked(seats, (0, 1, 2)) for seats in itertools.permutations(names)]
+    repeated = [_ranked(("A", "A", "B"), (0, 2, 1)), _ranked(("B", "A", "A"), (2, 0, 1)),
+                _ranked(("C", "C", "C"), (0, 1, 2))]
+    mixed = distinct[:3] + repeated[:2] + distinct[3:] + repeated[2:]
+    assert rank_trueskill(mixed, names) == rank_trueskill(distinct, names)
+    # Games of an agent against itself alone leave every rating at the prior.
+    assert rank_trueskill(repeated, names) == rank_trueskill([], names)

@@ -8,6 +8,7 @@ to reproduce a bug report, or to keep a library of games.
 A record is a plain JSON-serialisable dict::
 
     {
+      "rules": "2026-10-21",            # the rules version it was played under
       "seed": 12345,                    # make_env(seed=..., num_players=...)
       "num_players": 2,
       "actions": [[seat, action], ...], # every decision, in play order
@@ -31,6 +32,12 @@ import time
 from typing import Callable, Optional
 
 from puerto_rico.env import PuertoRicoEnv
+
+
+#: The rules version records are written with and replayed under. A record
+#: from other rules (before 2026-10-21: no "rules" field) is refused, since its
+#: decisions no longer line up: the optional benefits became decisions then.
+RULES = "2026-10-21"
 
 
 class ReplayError(RuntimeError):
@@ -58,6 +65,7 @@ def build_record(env: PuertoRicoEnv, seed: int, actions, player_types=None,
     player_types = list(player_types or [])
     human_seats = [i for i, t in enumerate(player_types) if t == "human"]
     return {
+        "rules": RULES,
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
         "seed": int(seed),
         "num_players": int(env.num_players),
@@ -87,6 +95,7 @@ def record_from_result(result: dict, num_players: int, player_types=None,
     human_seats = [i for i, t in enumerate(player_types) if t == "human"]
     winners = [int(w) for w in result["winners"]]
     return {
+        "rules": RULES,
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
         "seed": int(result["seed"]),
         "num_players": int(num_players),
@@ -125,10 +134,17 @@ def replay_record(record: dict,
 
     ``on_step(i, seat, action, env)`` is called before decision ``i`` is
     applied (so ``env`` shows the position the player saw). ``stop_after=n``
-    applies only the first ``n`` decisions. Raises :class:`ReplayError` if a
-    decision is out of turn, illegal, or played after the game ended.
+    applies only the first ``n`` decisions. Raises :class:`ReplayError` if the
+    record comes from other rules, or a decision is out of turn, illegal, or
+    played after the game ended.
     """
     from puerto_rico import make_env  # local import: puerto_rico/__init__ imports us
+
+    if record.get("rules") != RULES:
+        raise ReplayError(
+            f"the record was played under the rules of "
+            f"{record.get('rules') or 'before 2026-10-21'}, and this engine plays "
+            f"those of {RULES}; its decisions do not replay (see CHANGES.md)")
 
     env = make_env(seed=record["seed"], num_players=record["num_players"])
     actions = record["actions"]

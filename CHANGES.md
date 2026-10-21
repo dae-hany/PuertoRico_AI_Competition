@@ -11,6 +11,189 @@ suite of runs, and cost 8 GPU-hours.
 
 ---
 
+## 2026-10-21 — TrueSkill rates only games between distinct agents
+
+The 3p track's official metric rated a game that seats one agent more than
+once (the round-robin plays groups such as `[A, A, B]`) seat by seat, and each
+seat's update overwrote that agent's rating: only the last seat's result
+counted, and the scale drifted with the results. Over the 1,000 games of the
+3p heuristic round-robin in docs/BASELINES.md, the field's mean μ ended at 34.8
+on the old engine and at 19.4 on the new one (the prior is 25), against 26.9
+and 28.3 with those games left out; the order was the same either way.
+
+* `tournament/rankers/trueskill_ranker.py` skips such games, since TrueSkill
+  models every seat as a different player. The win rate still counts them,
+  and the 2p Elo (Bradley–Terry) already treated a self-match as neutral.
+  `tournament.runner.run_round_robin` and `tools/run_ladder.py` include such
+  groups by default, so this changes official 3p ratings, not only the
+  baseline report. Test:
+  `tests/test_tournament.py::test_trueskill_skips_games_that_seat_an_agent_twice`.
+* docs/BASELINES.md was regenerated: only the 3p TrueSkill column moves.
+  docs/RANKING.md states the rule. Tests: 195 → 196.
+
+## 2026-10-21 — the verified rules: accept/decline decisions, a 225/298 observation
+
+The research engine this repo shares an ancestor with (`PuertoRico_ESWA`,
+commit `11d6c11`) was checked rule by rule against the Puerto Rico Deluxe
+rulebook and against an independent reference model, and this repo now plays
+the same rules. The two engines had diverged, so nothing was copied wholesale:
+each difference was found, judged against the rulebook, and ported into this
+repo's own structure. Clause IDs below are those of
+`verification/rule/RULES.md` (R…, O…) and `verification/rule/CONFORMANCE.md`
+(E…).
+
+**Results move.** The observation is now **225 (2p) / 298 (3p)** values and
+there are two new actions, so an agent that reads the vector at hard-coded
+offsets past 49, and any network trained before today, must be updated. Game
+records from before today no longer replay (they are refused, with that
+reason). docs/BASELINES.md was regenerated.
+
+### How the differences were found
+
+Before any change, the old engine and the reference model
+(`verification/oracle.py`, written from the rule restatement without reference
+to either engine) were played side by side on 4,000 seeded games, 1,000 per
+player count. With five differences bridged, the legal actions and the full
+state agreed before every decision of every game: the five below are all there
+were.
+
+### Rules
+
+* **Optional benefits are decisions** (R4.5, R6.1.6; E9). The engine granted
+  these without asking:
+  * Mayor (R5.2.2): *"The player who chooses this role may first take one
+    colonist from the colonist supply (not from the colonist ship!) as the
+    privilege."*
+  * Hospice (R6.3.5): *"they may take a colonist from the colonist supply and
+    place it on the newly acquired plantation or quarry tile."*
+  * University (R6.3.10): *"they may take a colonist from the colonist supply
+    and place it on the newly acquired tile."*
+  * Captain (R5.6.5): *"When loading the first kind of goods, the captain
+    takes as the privilege 1 extra VP. The captain does not get this extra VP
+    for the goods loaded in subsequent turns in this captain phase."* For every
+    role, players *"may choose not to use the action or privilege of the
+    placard chosen."* The rulebook's one exception, *"The action of a role
+    placard is optional (exception: captain)"*, is the loading, which stays
+    mandatory (R4.5). A declined privilege is gone.
+  * Harbor (R6.3.11): *"Each time, during the captain phase, owners of an
+    occupied harbor load goods on a cargo ship, they earn one extra VP"*, and
+    *"Players are not required to use the special function of an occupied
+    beige building if they do not want to."*
+
+  Each is now offered, as it arises, as a decision with exactly two legal
+  actions: **170 accept** and **171 decline**. Declining can matter, because
+  these spend the colonists and VP chips whose exhaustion ends the game. The
+  benefits that only pay doubloons (the builder's and trader's privileges, the
+  markets, the factory, the prospector) stay automatic: refusing money never
+  helps.
+* **A wharf owner who passes may still use the wharf** (R5.6.1, R6.3.12; E10,
+  O5). *"The wharf can only be used once per captain phase by its owner, but
+  the player may choose when to use it, if at all"*, and *"each player may get
+  several turns to load goods on the cargo ships."* A pass used to end a
+  player's loading for the phase, so a wharf owner who could not load onto a
+  cargo ship had to use the wharf at once or never. Now a pass with a usable
+  wharf keeps the player's place, and any later load gives them another turn;
+  loading ends once every player has passed or finished since the most recent
+  load.
+* **Goods that fit are kept without asking** (R5.6.7; E11, O8). *"the players
+  must store the goods left on their windroses ... each player must find room
+  in one of their warehouses"*; only *"When players cannot store all their
+  extra goods, they may choose which goods to store and which to return to the
+  goods supply."* The engine asked even when everything fitted, and accepted an
+  assignment that threw goods away (1 corn and 3 sugar with a small warehouse:
+  sugar on the windrose and corn in the warehouse loses 2 sugar).
+* **126 VP chips with five players** (RULES.md §2, §3.1): *"with 5 players: 126
+  total points"*, in chips of *"31 x 1 and 19 x 5"*. It was 122. Neither track
+  is affected.
+* **A decision with one legal action is taken automatically** in every phase
+  (E2; no rulebook clause, since the same action is applied either way). The
+  engine had still asked, for instance, for a Mayor placement whose only
+  target was one kind of slot.
+
+Stricter, where the code had accepted calls no rule allows: `env.step` raises
+`ValueError` for an action outside the mask (an unmapped index used to be
+ignored, and a role chosen in the middle of the Builder phase went through);
+the engine refuses a role mid-phase, any other action while a benefit is
+pending, and a cargo ship that does not exist; and it checks for a second
+wharf use before anything changes.
+
+### Interface
+
+* Actions 170 / 171; while a benefit is pending they are the only legal
+  actions. docs/OBSERVATION_AND_ACTIONS.md lists which decisions an agent is
+  asked for.
+* Observation: a global `pending_benefit` one-hot over the five benefits at
+  offsets 50–54, right after `governor_idx`; every later global field moves by
+  5, and the player blocks start at `79 + 73 i`. `current_player` (36) and
+  `governor_idx` (49) do not move. `puerto_rico/observation.py` documents the
+  contract, and `tests/test_game.py` now checks its offsets against the env.
+* Engine: `Benefit`, `pending_benefits`, `resolve_benefit()`,
+  `goods_all_fit()`; the captain's pass bookkeeping is `_captain_done` and
+  `_captain_declined`. A hospice or university colonist's target is kept as a
+  board index, because the hand-rolled `__deepcopy__` rebuilds the boards (an
+  object reference would point outside a search clone).
+* `ForwardModel.step` raises `ValueError` for an illegal action.
+* Records carry `"rules": "2026-10-21"`, and older records are refused.
+  `describe` names the benefit, the harness's tamper fingerprint covers the
+  pending benefit, and the web UI asks a human player about each benefit.
+* `PpoAgent` refuses a checkpoint of the old 220/293 layout, with a message to
+  retrain it.
+* The heuristic baselines accept every benefit (the old engine always granted
+  them); MCTS and Search decide by searching, PPO by what it learned.
+
+### Verification
+
+* **Behaviour-preserving work first, on its own commit** (the observation
+  built in one pass, the mask restructured, dead code removed): 2,800 seeded
+  games, 916,122 recorded steps, identical observations, masks, rewards, infos
+  and full engine state before and after. `tools/bench_engine.py`: observation
+  0.060 → 0.043 ms, mask 0.0016 → 0.0008 ms, search proxy 1,965 → 2,471
+  sims/s.
+* **Reference model.** The model, its rule restatement and its specification
+  are vendored unchanged in `verification/` (SHA-256 pinned by
+  `tests/test_lockstep.py`); `verification/lockstep.py` is this repo's
+  converter to the canonical state, and the driver. On the final engine:
+  12,000 games (5,000 each with 2 and 3 players, 1,000 each with 4 and 5),
+  4,678,135 decisions, benefits accepted 70% of the time: no difference.
+  `tests/test_lockstep.py` replays 30 games per player count.
+* Tests: 138 → 195.
+
+### Decisions per game and the 0.1 s rule
+
+The benefit decisions add decisions to a game; the automatic single actions
+and the automatic storage take some away. Same pairings and seeds:
+
+| Pairing | Decisions per game, before | after |
+|---|---:|---:|
+| 2p ActionValue vs TradeBuilding (40 games) | 322.8 | 346.4 |
+| 2p ShippingRush vs Factory (40 games) | 318.6 | 321.6 |
+| 3p ShippingRush, ActionValue, TradeBuilding (30 games) | 405.3 | 417.3 |
+| longest of these games | 513 | 526 |
+
+A benefit decision is one more decision with two legal actions, under the same
+0.1 s limit as any other. The bundled baselines keep their 1 s budget and stay
+far from it (mean / slowest move, before → after, on a shared AMD Threadripper
+PRO 5995WX): Search 223 / 294 → 218 / 309 ms against TradeBuilding and
+240 / 435 → 214 / 288 ms against PPO; SearchLite 39 / 84 → 38 / 69 ms; MCTS
+120 / 175 → 95 / 138 ms in 2p and 130 / 183 → 104 / 175 ms in 3p; PPO and the
+heuristics under 2 ms.
+
+### Baselines
+
+* **Both PPO checkpoints were retrained** with the command and seed that made
+  them (5M steps of self-play, seed 42; 2.0 h each on 8 CPU threads, the two
+  runs side by side), on an unchanged trainer. They are kept as trained, with
+  no prior knowledge added: the baseline is what the bundled trainer reaches
+  with its defaults under these rules. training/README.md has the command; the
+  commit that installs them records how they compare with the old networks,
+  and docs/BASELINES.md where they stand now.
+* **docs/BASELINES.md was regenerated.** `tools/measure_baselines.py` now also
+  plays the 2p PPO against each planner (Search1500 160 games, SearchLite250
+  and MCTS60 40 each, with a Wilson interval), which training/README.md used to
+  quote by hand. Strength numbers are kept there alone: the README, the course
+  pages, training/README.md and the SearchLite docstring point to it instead of
+  quoting it.
+
 ## 2026-10-20 — a 2p PPO baseline, and it is the strongest 2p agent
 
 The 2p track had no RL baseline: the trainer supported `--num_players 2`, but

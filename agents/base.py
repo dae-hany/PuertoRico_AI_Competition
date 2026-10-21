@@ -47,10 +47,13 @@ class Agent:
 
         Args:
             observation: float32 vector of the game state. Its length depends on
-                the track — (220,) in the 2p / 1-vs-1 track, (293,) in the 3p
+                the track — (225,) in the 2p / 1-vs-1 track, (298,) in the 3p
                 track; ``len(observation)`` tells you which.
             action_mask: int vector of shape (200,); ``mask[a] == 1`` iff action
                 ``a`` is legal. You must return an action with ``mask[a] == 1``.
+                When only 170 and 171 are legal, you are being offered an
+                optional benefit (``observation`` names it): 170 accepts it,
+                171 declines it.
 
         Returns:
             The chosen action index (an ``int`` in ``[0, 200)``).

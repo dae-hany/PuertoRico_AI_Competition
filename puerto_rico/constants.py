@@ -1,4 +1,4 @@
-from enum import IntEnum, auto
+from enum import IntEnum
 
 class Phase(IntEnum):
     SETTLER = 0
@@ -10,6 +10,14 @@ class Phase(IntEnum):
     CAPTAIN_STORE = 6
     PROSPECTOR = 7
     END_ROUND = 8
+
+class Benefit(IntEnum):
+    """Optional benefits offered as an accept/decline decision (actions 170/171)."""
+    MAYOR_PRIVILEGE = 0    # the mayor's extra colonist from the supply
+    HOSPICE = 1            # a colonist on the tile just placed
+    UNIVERSITY = 2         # a colonist on the building just built
+    CAPTAIN_PRIVILEGE = 3  # +1 VP with the captain's first load
+    HARBOR = 4             # +1 VP with every load
 
 class Role(IntEnum):
     SETTLER = 0
@@ -86,7 +94,7 @@ PLANTATION_COUNTS = {
 QUARRY_COUNT = 8
 
 # Setup counts based on number of players
-VP_CHIPS_SETUP = {2: 65, 3: 75, 4: 100, 5: 122}
+VP_CHIPS_SETUP = {2: 65, 3: 75, 4: 100, 5: 126}  # rulebook setup: 126 VP with 5 players
 COLONIST_SHIP_SETUP = {2: 2, 3: 3, 4: 4, 5: 5}
 COLONIST_SUPPLY_SETUP = {2: 40, 3: 55, 4: 75, 5: 95}
 STARTING_DOUBLOONS = {2: 3, 3: 2, 4: 3, 5: 4}
@@ -134,60 +142,3 @@ GOOD_PRICES = {
     Good.TOBACCO: 3,
     Good.COFFEE: 4
 }
-
-# Mayor Phase Strategy Enum
-class MayorStrategy(IntEnum):
-    CAPTAIN_FOCUS = 0        # Shipping strategy
-    TRADE_FACTORY_FOCUS = 1  # Trading + Factory strategy
-    BUILDING_FOCUS = 2       # Infrastructure strategy
-
-# Large VP Buildings (always highest priority)
-LARGE_VP_BUILDINGS = [
-    BuildingType.GUILDHALL,
-    BuildingType.RESIDENCE,
-    BuildingType.FORTRESS,
-    BuildingType.CUSTOMS_HOUSE,
-    BuildingType.CITY_HALL,
-]
-
-# Strategy-specific building priorities
-MAYOR_STRATEGY_BUILDINGS = {
-    MayorStrategy.CAPTAIN_FOCUS: [
-        BuildingType.WHARF,
-        BuildingType.HARBOR,
-        BuildingType.LARGE_WAREHOUSE,
-        BuildingType.SMALL_WAREHOUSE,
-    ],
-    MayorStrategy.TRADE_FACTORY_FOCUS: [
-        BuildingType.OFFICE,
-        BuildingType.LARGE_MARKET,
-        BuildingType.SMALL_MARKET,
-        BuildingType.FACTORY,
-    ],
-    MayorStrategy.BUILDING_FOCUS: [
-        BuildingType.UNIVERSITY,
-        BuildingType.HOSPICE,
-        BuildingType.CONSTRUCTION_HUT,
-        BuildingType.HACIENDA,
-    ],
-}
-
-# Production building to Good mapping (for production pairs)
-PRODUCTION_BUILDINGS = {
-    Good.COFFEE: [BuildingType.COFFEE_ROASTER],
-    Good.TOBACCO: [BuildingType.TOBACCO_STORAGE],
-    Good.SUGAR: [BuildingType.SUGAR_MILL, BuildingType.SMALL_SUGAR_MILL],
-    Good.INDIGO: [BuildingType.INDIGO_PLANT, BuildingType.SMALL_INDIGO_PLANT],
-}
-
-# Plantation to Good mapping
-PLANTATION_TO_GOOD = {
-    TileType.COFFEE_PLANTATION: Good.COFFEE,
-    TileType.TOBACCO_PLANTATION: Good.TOBACCO,
-    TileType.SUGAR_PLANTATION: Good.SUGAR,
-    TileType.INDIGO_PLANTATION: Good.INDIGO,
-    TileType.CORN_PLANTATION: Good.CORN,
-}
-
-# Good value order (descending) for production pair priority
-GOOD_VALUE_ORDER = [Good.COFFEE, Good.TOBACCO, Good.SUGAR, Good.INDIGO, Good.CORN]
