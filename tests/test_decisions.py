@@ -191,3 +191,46 @@ def test_no_agent_is_asked_a_decision_with_one_legal_action(num_players):
             legal = np.flatnonzero(env.observe(name)["action_mask"]).tolist()
             assert len(legal) >= 2, (env.game.current_phase, legal)
             env.step(rng.choice(legal))
+
+
+# ── illegal actions are refused ──────────────────────────────────────────────
+
+def test_step_rejects_actions_outside_the_mask():
+    env = PuertoRicoEnv(num_players=3)
+    env.reset(seed=0)
+    for action in (14, 15, 199, 170, 16):
+        with pytest.raises(ValueError):
+            env.step(action)
+    env.step(0)                               # Settler
+    with pytest.raises(ValueError):
+        env.step(1)                           # a role in the middle of a phase
+
+
+def test_engine_refuses_a_role_in_the_middle_of_a_phase():
+    from puerto_rico.constants import Role
+
+    g = _game()
+    g.select_role(g.current_player_idx, Role.SETTLER)
+    with pytest.raises(ValueError, match="between phases"):
+        g.select_role(g.current_player_idx, Role.MAYOR)
+
+
+def test_second_wharf_use_is_refused_before_anything_changes():
+    g = _game()
+    _captain_phase(g, 0)
+    cap = g.players[0]
+    _occupy(cap, BuildingType.WHARF)
+    cap.goods[Good.COFFEE] = 2
+    g._wharf_used[0] = True
+    with pytest.raises(ValueError, match="once per Captain phase"):
+        g.action_captain_load(0, -1, Good.COFFEE)
+    assert g._captain_privilege_used is False, "the privilege must not be spent"
+    assert cap.goods[Good.COFFEE] == 2 and cap.vp_chips == 0
+
+
+def test_engine_refuses_a_cargo_ship_that_does_not_exist():
+    g = _game(n=2)
+    _captain_phase(g, 0)
+    g.players[0].goods[Good.CORN] = 1
+    with pytest.raises(ValueError, match="cargo ship index"):
+        g.action_captain_load(0, 2, Good.CORN)    # the 2p game has two ships

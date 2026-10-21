@@ -498,6 +498,9 @@ class PuertoRicoEnv(AECEnv):
             g_type = Good(action - 93)
             self.game.action_craftsman(player_idx, privilege_good=g_type)
 
+        else:
+            raise ValueError(f"Action {action} is not part of the action encoding.")
+
     def step(self, action):
         if (
             self.terminations.get(self.agent_selection, True)
@@ -507,10 +510,16 @@ class PuertoRicoEnv(AECEnv):
             return
 
         agent = self.agent_selection
+        player_idx = self.agent_name_mapping[agent]
+        # Only actions the mask allows reach the engine. An unmapped index used to
+        # be ignored, and a mapped one in the wrong phase could even be applied
+        # (choosing a role in the middle of the Builder phase, say).
+        action = int(action)
+        if not (0 <= action < 200 and self.valid_action_mask()[action]):
+            raise ValueError(f"Illegal action {action} for {agent} in phase {self._phase_name()}.")
+
         self._cumulative_rewards[agent] = 0.0
         self._clear_rewards()
-        player_idx = self.agent_name_mapping[agent]
-
         self._apply_checked(player_idx, action, self._apply_action, player_idx, action)
 
         self._game_step_count += 1

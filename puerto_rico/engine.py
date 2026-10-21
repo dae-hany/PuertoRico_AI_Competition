@@ -330,6 +330,8 @@ class PuertoRicoGame:
 
     def select_role(self, player_idx: int, role: Role):
         """Player selects a role. Transitions game to that phase."""
+        if self.current_phase not in (None, Phase.END_ROUND):
+            raise ValueError("Roles are chosen only between phases.")
         if player_idx != self.current_player_idx:
             raise ValueError("Not this player's turn to pick a role!")
         if role not in self.available_roles:
@@ -739,15 +741,19 @@ class PuertoRicoGame:
         if amount == 0:
             raise ValueError("Player has no goods of this type.")
             
-        is_wharf = False
-        if ship_idx == -1:
+        is_wharf = ship_idx == -1
+        if is_wharf:
             if not p.is_building_occupied(BuildingType.WHARF):
                 raise ValueError("Player does not have occupied Wharf for imaginary ship.")
-            # Assume wharf is single use per captain phase. This needs tracking if we want to be strict,
-            # but usually you just use it once. Let's assume it's valid.
+            # Checked before anything changes (it used to come after the captain's
+            # privilege had already been marked as used).
+            if self._wharf_used.get(player_idx, False):
+                raise ValueError("Wharf can only be used once per Captain phase.")
+            # Rulebook, Wharf: all goods of the kind, whatever the cargo ships carry.
             loaded_amount = amount
-            is_wharf = True
         else:
+            if not 0 <= ship_idx < len(self.cargo_ships):
+                raise ValueError("Invalid cargo ship index.")
             ship = self.cargo_ships[ship_idx]
             if ship.is_full:
                 raise ValueError("Ship is full.")
@@ -790,8 +796,6 @@ class PuertoRicoGame:
             self._captain_privilege_used = True
             
         if is_wharf:
-            if self._wharf_used.get(player_idx, False):
-                raise ValueError("Wharf can only be used once per Captain phase.")
             self._wharf_used[player_idx] = True
             
         if p.is_building_occupied(BuildingType.HARBOR):

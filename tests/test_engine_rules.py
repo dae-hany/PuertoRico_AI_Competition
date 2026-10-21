@@ -87,13 +87,31 @@ def test_engine_rejecting_a_move_is_a_hard_failure_not_a_silent_loss():
 
     That turned a bug in this repo into a corrupted result. It must raise.
     Agents cannot reach this path: ``tournament.match`` replaces an illegal
-    agent move with a random legal one before the env ever sees it.
+    agent move with a random legal one before the env ever sees it, and the
+    env itself refuses a move outside the mask (next test). So the mask is
+    made to lie here, to reach the case it guards: a mask/engine mismatch.
     """
     env = make_env(seed=0, num_players=3)
-    assert env.unwrapped.game.current_phase == Phase.END_ROUND   # role selection
+    base = env.unwrapped
+    assert base.game.current_phase == Phase.END_ROUND   # role selection
 
+    lying = np.zeros(200, dtype=bool)
+    lying[39] = True              # "sell a good" while nobody is in the Trader phase
+    base.valid_action_mask = lambda: lying
     with pytest.raises(AssertionError, match="engine rejected it"):
-        env.step(39)              # "sell a good" while nobody is in the Trader phase
+        env.step(39)
+
+
+def test_an_action_outside_the_mask_is_refused_and_changes_nothing():
+    env = make_env(seed=0, num_players=3)
+    base = env.unwrapped
+    before = (base.game.current_phase, base.game.current_player_idx,
+              base.game.round_number, dict(base._cumulative_rewards))
+    for action in (39, 14, 15, 199, 200, -1):
+        with pytest.raises(ValueError, match="Illegal action"):
+            env.step(action)
+    assert (base.game.current_phase, base.game.current_player_idx,
+            base.game.round_number, dict(base._cumulative_rewards)) == before
 
 
 @pytest.mark.parametrize("num_players", [2, 3])
