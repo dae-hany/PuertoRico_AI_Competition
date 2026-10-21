@@ -86,7 +86,7 @@ PLANTATION_COUNTS = {
 QUARRY_COUNT = 8
 
 # Setup counts based on number of players
-VP_CHIPS_SETUP = {2: 65, 3: 75, 4: 100, 5: 122}
+VP_CHIPS_SETUP = {2: 65, 3: 75, 4: 100, 5: 126}  # rulebook setup: 126 VP with 5 players
 COLONIST_SHIP_SETUP = {2: 2, 3: 3, 4: 4, 5: 5}
 COLONIST_SUPPLY_SETUP = {2: 40, 3: 55, 4: 75, 5: 95}
 STARTING_DOUBLOONS = {2: 3, 3: 2, 4: 3, 5: 4}
