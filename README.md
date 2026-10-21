@@ -133,14 +133,14 @@ budgets are quoted with the numbers; `SearchAgent`'s is a node count rather than
 a clock, so it plays the same move on any hardware. The numbers hold under the
 **0.1 s rule**: it applies to entries, while the bundled baselines keep their own
 1 s budget, and none of them comes near it (`Search`'s slowest move measured
-≈ 0.4 s), so these are the opponents your entry meets.
+≈ 0.3 s), so these are the opponents your entry meets.
 
 The heuristic baselines are player-count-agnostic, and so is `MctsAgent` (its
 Max^N value vectors are sized from the game it is handed). `SearchAgent` /
 `SearchLiteAgent` search the 1‑vs‑1 game and fall back to a reactive heuristic in
 a 3p game. `PpoAgent` plays both tracks with one checkpoint each, both
 trained with the same command and default settings (5M steps of self-play
-each; the 2p run takes about 1.6 h on a CPU); see [`training/README.md`](training/README.md), and
+each, about 2 h each on 8 CPU threads); see [`training/README.md`](training/README.md), and
 [`examples/ppo_entry/`](examples/ppo_entry/) for an entry built on the 2p one.
 
 ### Recommended approach for the 2p track

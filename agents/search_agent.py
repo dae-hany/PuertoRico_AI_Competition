@@ -231,9 +231,9 @@ class SearchLiteAgent(SearchAgent):
     plies — fast (~0.04 s/move) and, like its parent, identical in strength on
     any hardware.
 
-    "Lighter" is relative to :class:`SearchAgent`, not to the field: measured, it
-    still beats every bundled heuristic (88-100%, see ``docs/BASELINES.md``). It
-    is the second rung of a ladder whose first rung is ``ActionValueAgent``.
+    "Lighter" is relative to :class:`SearchAgent`, not to the field (how it fares
+    against the heuristics is measured in ``docs/BASELINES.md``). It is the
+    second rung of a ladder whose first rung is ``ActionValueAgent``.
     """
 
     name = "SearchLite"
