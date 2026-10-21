@@ -66,6 +66,11 @@ submissions arrive over time). Its main **limitation** is that it assumes a
 [`tournament/rankers/trueskill_ranker.py`](../tournament/rankers/trueskill_ranker.py)
 (uses the `trueskill` package).
 
+TrueSkill models every seat of a game as a different player, so a game in which
+one agent holds more than one seat (the round-robin plays groups such as
+`[A, A, B]`) is **left out of the TrueSkill rating**; the win rate still counts
+it.
+
 ## Win rate — reported in both tracks
 
 An agent's win rate is the **fraction of games it wins** across the round-robin; a
