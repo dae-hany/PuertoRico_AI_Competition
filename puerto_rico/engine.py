@@ -83,7 +83,10 @@ class PuertoRicoGame:
         # Phase-specific tracking flags
         self._captain_privilege_used = False
         self._wharf_used = {i: False for i in range(num_players)}
-        self._captain_passed_players = set()
+        # Captain turns: players who take no further turn in the phase, and players
+        # who passed since the most recent load while their wharf was still usable.
+        self._captain_done = set()
+        self._captain_declined = set()
         self._storage_assignments = {i: {'windrose': None, 'warehouses': []} for i in range(self.num_players)}
         self._hacienda_used = False
         self._colonists_ship_underfilled = False # Evaluated at end of Mayor phase
@@ -131,7 +134,7 @@ class PuertoRicoGame:
                 nd[k] = dict(v)
             elif k in cls._CLONE_LIST_FIELDS:
                 nd[k] = list(v)
-            elif k == "_captain_passed_players":
+            elif k in ("_captain_done", "_captain_declined"):
                 nd[k] = set(v)
             elif k == "_storage_assignments":
                 nd[k] = {i: {"windrose": a["windrose"],
@@ -382,7 +385,8 @@ class PuertoRicoGame:
             self.current_phase = Phase.TRADER
         elif role == Role.CAPTAIN:
             self.current_phase = Phase.CAPTAIN
-            self._captain_passed_players = set()
+            self._captain_done = set()
+            self._captain_declined = set()
             self._wharf_used = {i: False for i in range(self.num_players)}
         elif role in (Role.PROSPECTOR_1, Role.PROSPECTOR_2):
             self.current_phase = Phase.PROSPECTOR
@@ -394,14 +398,16 @@ class PuertoRicoGame:
     def _advance_phase_turn(self):
         """Advances turn to next player in the current phase."""
         if self.current_phase == Phase.CAPTAIN:
-            if len(self._captain_passed_players) >= self.num_players:
+            # Loading ends once every player has taken their last turn or passed
+            # since the most recent load.
+            if len(self._captain_done | self._captain_declined) >= self.num_players:
                 self.current_phase = Phase.CAPTAIN_STORE
                 self.players_taken_action = 0
                 self.current_player_idx = self.active_role_player_idx()
                 self._storage_assignments = {i: {'windrose': None, 'warehouses': []} for i in range(self.num_players)}
             else:
                 self._next_player()
-                while self.current_player_idx in self._captain_passed_players:
+                while self.current_player_idx in self._captain_done:
                     self._next_player()
         elif self.current_phase == Phase.MAYOR:
             # Mayor phase: each player selects strategy once, then auto-fills
@@ -797,6 +803,9 @@ class PuertoRicoGame:
         p.remove_good(good_type, loaded_amount)
         if is_wharf:
             self.goods_supply[good_type] += loaded_amount # Wharf goods return to supply immediately
+
+        # Any load gives the players who passed with a usable wharf another turn.
+        self._captain_declined.clear()
         
         # In actual Puerto Rico, a player MUST load if they can.
         # So instead of immediately advancing, the player's turn continues until they can't load.
@@ -838,8 +847,18 @@ class PuertoRicoGame:
         
         if can_load_anything:
             raise ValueError("Rule Violation: Player MUST load if they have valid goods and ship capacity.")
-            
-        self._captain_passed_players.add(player_idx)
+
+        # Rulebook, Wharf: "the player may choose when to use it, if at all", so a
+        # pass forfeits further turns only when the wharf is not an option. A
+        # player who passes with a usable wharf keeps their place and gets another
+        # turn if anyone loads after the pass.
+        can_still_use_wharf = (p.is_building_occupied(BuildingType.WHARF)
+                               and not self._wharf_used.get(player_idx, False)
+                               and any(p.goods[g] > 0 for g in Good))
+        if can_still_use_wharf:
+            self._captain_declined.add(player_idx)
+        else:
+            self._captain_done.add(player_idx)
         self._advance_phase_turn()
 
     @staticmethod
