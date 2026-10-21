@@ -276,3 +276,24 @@ def test_registry_lists_ppo_for_each_bundled_checkpoint():
     for num_players, path in PPO_CHECKPOINTS.items():
         if os.path.exists(path):
             assert "PPO" in baseline_names(num_players)
+
+
+@pytest.mark.parametrize("name,make", [(n, m) for n, m in AGENT_FACTORIES
+                                       if n not in ("Random", "MCTS", "PPO")])
+def test_heuristics_accept_every_optional_benefit(name, make):
+    """The engine used to grant the five optional benefits without asking; the
+    heuristics accept them, so their play stays what it was. (ShippingRush and
+    Factory scored accept and decline alike, so their tie-breaking noise would
+    have declined half of them.)"""
+    from puerto_rico import ForwardModel, flatten_observation, make_env
+    from puerto_rico.env import ACCEPT_BENEFIT
+
+    for seed in range(4):
+        env = make_env(seed=seed, num_players=3)
+        env.step(1)                                   # the governor takes the Mayor
+        assert env.unwrapped.game.pending_benefits    # the privilege colonist
+        agent = make()
+        agent.on_game_start(ForwardModel(env))
+        raw = env.observe(env.agent_selection)
+        mask = np.asarray(raw["action_mask"], dtype=np.int8)
+        assert agent.act(flatten_observation(raw["observation"]), mask) == ACCEPT_BENEFIT

@@ -2,6 +2,7 @@ import numpy as np
 
 from agents.base import Agent
 from puerto_rico.constants import BUILDING_DATA, BuildingType, Good, TileType
+from puerto_rico.env import ACCEPT_BENEFIT, DECLINE_BENEFIT
 
 
 # Pre-compute building costs for threshold checks
@@ -285,6 +286,10 @@ class ShippingRushAgent(Agent):
 
         priority[15] = 1.0  # Pass is weakest
         priority[16:39] = 0.5  # Suppress random building
+        # Optional benefits: always accept, as the engine used to grant them
+        # unasked (otherwise the tie-breaking noise would decline half of them).
+        priority[ACCEPT_BENEFIT] = 50.0
+        priority[DECLINE_BENEFIT] = 0.0
 
         # Rebuild the structured observation that this strategy reads from.
         fm = self._env

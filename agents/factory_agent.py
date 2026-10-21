@@ -14,6 +14,7 @@ import numpy as np
 
 from agents.base import Agent
 from puerto_rico.constants import BUILDING_DATA, BuildingType, TileType, Good
+from puerto_rico.env import ACCEPT_BENEFIT, DECLINE_BENEFIT
 
 # ── Pre-computed look-ups ─────────────────────────────────────────────────────
 _COST: dict[BuildingType, int] = {
@@ -608,6 +609,11 @@ class FactoryAgent(Agent):
                 elif b_type in [BuildingType.SMALL_INDIGO_PLANT, BuildingType.INDIGO_PLANT, BuildingType.SMALL_SUGAR_MILL, BuildingType.SUGAR_MILL, BuildingType.TOBACCO_STORAGE, BuildingType.COFFEE_ROASTER]:
                     base = 245.0
                 priority[act_city] = base + self._rng.uniform(0, 5.0)
+
+        # Optional benefits: always accept, as the engine used to grant them
+        # unasked (otherwise the tie-breaking noise would decline half of them).
+        priority[ACCEPT_BENEFIT] = 500.0
+        priority[DECLINE_BENEFIT] = 0.0
 
         # ── Finalize ─────────────────────────────────────────────────────────
         priority += self._rng.uniform(0, 0.05, self.action_dim)

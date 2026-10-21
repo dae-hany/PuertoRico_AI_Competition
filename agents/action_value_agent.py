@@ -7,6 +7,7 @@ from puerto_rico.constants import (
     Phase, Role, Good, TileType, BuildingType,
     BUILDING_DATA, VP_CHIPS_SETUP, COLONIST_SUPPLY_SETUP
 )
+from puerto_rico.env import ACCEPT_BENEFIT
 
 
 class ActionValueAgent(Agent):
@@ -289,6 +290,14 @@ class ActionValueAgent(Agent):
             if BUILDING_DATA.get(b_type, [0,0,0,0,False])[4]: # is_large 
                 bonus = 2.0
             bonus *= decay
+
+        # ═══ Optional benefit: accept (170) / decline (171) ═══
+        # Always accept. The engine used to grant these benefits without asking,
+        # so accepting keeps this heuristic's play what it was before they
+        # became decisions (a Search agent ordering moves with it tries the
+        # acceptance first).
+        elif action_idx == ACCEPT_BENEFIT:
+            bonus = 0.5
         
         return base_heuristic + bonus
     
