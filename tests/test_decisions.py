@@ -152,3 +152,42 @@ def test_loading_ends_after_a_full_cycle_without_a_load():
     g.action_captain_pass(2)
     assert g.current_phase == Phase.CAPTAIN_STORE
     assert g.players[1].goods[Good.COFFEE] == 3
+
+
+# ── a single legal action is taken without asking ────────────────────────────
+
+def test_single_mayor_placement_is_automatic():
+    """One colonist and two empty corn plantations: one legal action. The env
+    used to ask the agent for it; every other single-action decision was
+    already automatic."""
+    from puerto_rico.components import IslandTile
+    from puerto_rico.constants import TileType
+
+    env = PuertoRicoEnv(num_players=3)
+    env.reset(seed=0)
+    g = env.game
+    p = g.players[g.current_player_idx]
+    p.island_board = [IslandTile(TileType.CORN_PLANTATION), IslandTile(TileType.CORN_PLANTATION)]
+    p.unplaced_colonists = 1
+    g.current_phase = Phase.MAYOR
+    assert np.flatnonzero(env.valid_action_mask()).tolist() == [120 + TileType.CORN_PLANTATION]
+    assert env._execute_auto_actions() is True
+    assert sum(t.is_occupied for t in p.island_board) == 1
+
+
+@pytest.mark.parametrize("num_players", [2, 3])
+def test_no_agent_is_asked_a_decision_with_one_legal_action(num_players):
+    """Role selection always offers at least two placards, so it is never
+    automatic; every other single-action decision is."""
+    for seed in range(6):
+        env = PuertoRicoEnv(num_players=num_players)
+        env.reset(seed=seed)
+        rng = random.Random(seed)
+        while env.agents:
+            name = env.agent_selection
+            if env.terminations.get(name, False) or env.truncations.get(name, False):
+                env.step(None)
+                continue
+            legal = np.flatnonzero(env.observe(name)["action_mask"]).tolist()
+            assert len(legal) >= 2, (env.game.current_phase, legal)
+            env.step(rng.choice(legal))

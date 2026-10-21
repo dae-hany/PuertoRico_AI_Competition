@@ -310,79 +310,45 @@ class PuertoRicoEnv(AECEnv):
 
     def _execute_auto_actions(self):
         """
-        Automatically execute actions when there's no meaningful choice.
-        Returns True if an auto-action was executed, False otherwise.
+        Take one step that needs no decision.
+        Returns True if a step was taken, False if the current player must decide.
         """
-        if self.game.current_phase is None:
+        game = self.game
+        if game.current_phase is None:
             return False
 
-        player_idx = self.game.current_player_idx
-        p = self.game.players[player_idx]
-        phase = self.game.current_phase
+        if game.current_phase == Phase.MAYOR:
+            player_idx = game.current_player_idx
+            p = game.players[player_idx]
+            empty_slots = self._mayor_empty_slots(p)
 
-        # 1. Mayor is the only phase with no Pass action, so a player with
-        #    nothing to place has a legitimately empty action mask — and would
-        #    stall the phase rather than be auto-advanced. This check therefore
-        #    has to run *before* the empty-mask early return below, otherwise it
-        #    is unreachable. (Engine invariants make the state unreachable today:
-        #    every seat is recalled at the start of its Mayor turn, which frees
-        #    all of its slots, and no seat can own zero colonists or zero tiles.
-        #    This keeps the env safe if those invariants ever change.)
-        empty_slots = self._mayor_empty_slots(p) if phase == Phase.MAYOR else []
-        if phase == Phase.MAYOR and (p.unplaced_colonists == 0 or len(empty_slots) == 0):
-            self.game._advance_phase_turn()
-            return True
+            # Mayor is the only phase with no Pass action, so a player with
+            # nothing to place has a legitimately empty action mask, and would
+            # stall the phase rather than be auto-advanced. (Engine invariants
+            # make the state unreachable today: every seat is recalled at the
+            # start of its Mayor turn, which frees all of its slots, and no seat
+            # can own zero colonists or zero tiles. This keeps the env safe if
+            # those invariants ever change.)
+            if p.unplaced_colonists == 0 or len(empty_slots) == 0:
+                game._advance_phase_turn()
+                return True
 
-        # 2. Check for pass-only or single-choice situations
-        mask = self.valid_action_mask()
-        valid_actions = np.where(mask == 1)[0]
+            # At least as many colonists as empty slots: every slot must be
+            # filled ("All empty circles must be filled, if possible"), so where
+            # each one goes carries no decision.
+            if p.unplaced_colonists >= len(empty_slots):
+                is_city, slot_idx = empty_slots[0]
+                self._apply_checked(player_idx, None, game.action_mayor_place_colonist,
+                                    player_idx, is_city=is_city, slot_idx=slot_idx)
+                return True
 
-        if len(valid_actions) == 0:
-            return False
-
+        # A single legal action is taken without asking, in every phase.
+        valid_actions = np.flatnonzero(self.valid_action_mask())
         if len(valid_actions) == 1:
-            action = valid_actions[0]
-
-            # Auto-execute the only valid action
-            if action == 15:  # Pass
-                self._handle_pass(player_idx)
-                return True
-
-            # Captain forced shipping (only one ship/good combo)
-            if phase == Phase.CAPTAIN and 44 <= action <= 63:
-                if 44 <= action <= 58:
-                    idx = action - 44
-                    ship_idx = idx // 5
-                    g_type = Good(idx % 5)
-                    self.game.action_captain_load(player_idx, ship_idx, g_type)
-                else:  # Wharf
-                    g_type = Good(action - 59)
-                    self.game.action_captain_load(player_idx, -1, g_type)
-                return True
-
-            # Captain Store forced choice
-            if phase == Phase.CAPTAIN_STORE and action != 15:
-                if 64 <= action <= 68:
-                    g_type = Good(action - 64)
-                    self.game.action_captain_store_windrose(player_idx, g_type)
-                    return True
-                elif 106 <= action <= 110:
-                    g_type = Good(action - 106)
-                    self.game.action_captain_store_warehouse(player_idx, g_type)
-                    return True
-
-            # Craftsman auto-pass for non-privilege holders
-            if phase == Phase.CRAFTSMAN and action == 15:
-                self.game.action_craftsman(player_idx, privilege_good=None)
-                return True
-
-        # 3. Mayor phase auto-fill: more colonists than slots, so where each one
-        #    goes carries no decision — place them without asking.
-        if phase == Phase.MAYOR and p.unplaced_colonists >= len(empty_slots):
-            is_city, slot_idx = empty_slots[0]
-            self.game.action_mayor_place_colonist(player_idx, is_city=is_city, slot_idx=slot_idx)
+            action = int(valid_actions[0])
+            self._apply_checked(game.current_player_idx, action, self._apply_action,
+                                game.current_player_idx, action)
             return True
-
         return False
 
     def _finalize_episode(self) -> None:
@@ -410,6 +376,128 @@ class PuertoRicoEnv(AECEnv):
             self.infos[a]["final_scores"] = final_scores
             self.infos[a]["episode_metrics"] = self.episode_metrics
 
+    def _phase_name(self) -> str:
+        return self.game.current_phase.name if self.game.current_phase is not None else 'INIT'
+
+    def _apply_checked(self, player_idx: int, action, fn, *args, **kwargs):
+        """Run ``fn`` for a step the mask allowed; an engine refusal is a bug.
+
+        An action the mask advertised as legal but the engine rejects is a bug
+        in this repo, not a game event. It used to be swallowed: the actor got
+        -10 and the whole game was terminated, which quietly corrupted a result
+        instead of reporting a defect (exactly how a Mayor-phase deadlock went
+        unnoticed in the research code until it was made loud). Agents cannot
+        trigger this: the harness already replaces illegal *agent* moves with a
+        random legal one before the env ever sees them.
+        """
+        try:
+            return fn(*args, **kwargs)
+        except ValueError as e:
+            what = f"action {action}" if action is not None else "an automatic step"
+            raise AssertionError(
+                f"valid_action_mask() allowed {what} but the engine rejected it "
+                f"in phase {self._phase_name()} for player_{player_idx}: {e}"
+            ) from e
+
+    def _apply_action(self, player_idx: int, action: int):
+        """Carry out one action of the encoding (docs/OBSERVATION_AND_ACTIONS.md)."""
+        p = self.game.players[player_idx]
+
+        if 0 <= action <= 7:
+            role = Role(action)
+            # Track total role selections
+            self.episode_metrics["role_selections"][role.name] += 1
+            # Track role selections by round
+            round_num = self.game.round_number
+            if round_num not in self.episode_metrics["role_selections_by_round"]:
+                self.episode_metrics["role_selections_by_round"][round_num] = {r.name: 0 for r in Role}
+            self.episode_metrics["role_selections_by_round"][round_num][role.name] += 1
+            self.game.select_role(player_idx, role)
+
+        elif 8 <= action <= 13:
+            # Settler Phase (No Hacienda)
+            if action <= 12:
+                target_type = TileType(action - 8)
+                idx = -1
+                for i, t in enumerate(self.game.face_up_plantations):
+                    if t == target_type:
+                        idx = i
+                        break
+                if idx == -1:
+                    raise ValueError(f"Tile {target_type.name} not available in face_up_plantations.")
+                self.game.action_settler(player_idx, tile_choice=idx)
+            else:
+                self.game.action_settler(player_idx, tile_choice=-1) # Quarry
+
+        elif action == 15:
+            # Pass
+            self._handle_pass(player_idx)
+
+        elif 16 <= action <= 38:
+            # Builder Phase (23 buildings)
+            b_type = BuildingType(action - 16)
+            self.game.action_builder(player_idx, building_choice=b_type)
+
+        elif 39 <= action <= 43:
+            # Trader Phase
+            g_type = Good(action - 39)
+            self.game.action_trader(player_idx, sell_good=g_type)
+
+        elif 44 <= action <= 58:
+            # Captain Load (5 goods * 3 ships)
+            idx = action - 44
+            ship_idx = idx // 5
+            g_type = Good(idx % 5)
+            self.game.action_captain_load(player_idx, ship_idx, g_type)
+
+        elif 59 <= action <= 63:
+            # Captain Load Wharf
+            g_type = Good(action - 59)
+            self.game.action_captain_load(player_idx, -1, g_type)
+
+        elif 64 <= action <= 68:
+            # Captain Store Windrose
+            g_type = Good(action - 64)
+            self.game.action_captain_store_windrose(player_idx, g_type)
+
+        elif 106 <= action <= 110:
+            # Captain Store Warehouse
+            g_type = Good(action - 106)
+            self.game.action_captain_store_warehouse(player_idx, g_type)
+
+        elif action == 105:
+            # Hacienda draw
+            self.game.action_hacienda_draw(player_idx)
+
+        elif 120 <= action <= 125:
+            # Mayor Placement (Island) by TileType
+            target_type = TileType(action - 120)
+            idx = -1
+            for i, t in enumerate(p.island_board):
+                if t.tile_type == target_type and not t.is_occupied:
+                    idx = i
+                    break
+            if idx == -1:
+                raise ValueError(f"No unoccupied {target_type.name} found on island.")
+            self.game.action_mayor_place_colonist(player_idx, is_city=False, slot_idx=idx)
+
+        elif 140 <= action <= 162:
+            # Mayor Placement (City) by BuildingType
+            target_type = BuildingType(action - 140)
+            idx = -1
+            for i, b in enumerate(p.city_board):
+                if b.building_type == target_type and b.colonists < BUILDING_DATA[b.building_type][2]:
+                    idx = i
+                    break
+            if idx == -1:
+                raise ValueError(f"No valid building of type {target_type.name} found in city.")
+            self.game.action_mayor_place_colonist(player_idx, is_city=True, slot_idx=idx)
+
+        elif 93 <= action <= 97:
+            # Craftsman Privilege
+            g_type = Good(action - 93)
+            self.game.action_craftsman(player_idx, privilege_good=g_type)
+
     def step(self, action):
         if (
             self.terminations.get(self.agent_selection, True)
@@ -422,119 +510,8 @@ class PuertoRicoEnv(AECEnv):
         self._cumulative_rewards[agent] = 0.0
         self._clear_rewards()
         player_idx = self.agent_name_mapping[agent]
-        p = self.game.players[player_idx]
 
-        try:
-            if 0 <= action <= 7:
-                role = Role(action)
-                # Track total role selections
-                self.episode_metrics["role_selections"][role.name] += 1
-                # Track role selections by round
-                round_num = self.game.round_number
-                if round_num not in self.episode_metrics["role_selections_by_round"]:
-                    self.episode_metrics["role_selections_by_round"][round_num] = {r.name: 0 for r in Role}
-                self.episode_metrics["role_selections_by_round"][round_num][role.name] += 1
-                self.game.select_role(player_idx, role)
-
-            elif 8 <= action <= 13:
-                # Settler Phase (No Hacienda)
-                if action <= 12:
-                    target_type = TileType(action - 8)
-                    idx = -1
-                    for i, t in enumerate(self.game.face_up_plantations):
-                        if t == target_type:
-                            idx = i
-                            break
-                    if idx == -1:
-                        raise ValueError(f"Tile {target_type.name} not available in face_up_plantations.")
-                    self.game.action_settler(player_idx, tile_choice=idx)
-                else:
-                    self.game.action_settler(player_idx, tile_choice=-1) # Quarry
-
-            elif action == 15:
-                # Pass
-                self._handle_pass(player_idx)
-
-            elif 16 <= action <= 38:
-                # Builder Phase (23 buildings)
-                b_type = BuildingType(action - 16)
-                self.game.action_builder(player_idx, building_choice=b_type)
-
-            elif 39 <= action <= 43:
-                # Trader Phase
-                g_type = Good(action - 39)
-                self.game.action_trader(player_idx, sell_good=g_type)
-
-            elif 44 <= action <= 58:
-                # Captain Load (5 goods * 3 ships)
-                idx = action - 44
-                ship_idx = idx // 5
-                g_type = Good(idx % 5)
-                self.game.action_captain_load(player_idx, ship_idx, g_type)
-
-            elif 59 <= action <= 63:
-                # Captain Load Wharf
-                g_type = Good(action - 59)
-                self.game.action_captain_load(player_idx, -1, g_type)
-
-            elif 64 <= action <= 68:
-                # Captain Store Windrose
-                g_type = Good(action - 64)
-                self.game.action_captain_store_windrose(player_idx, g_type)
-
-            elif 106 <= action <= 110:
-                # Captain Store Warehouse
-                g_type = Good(action - 106)
-                self.game.action_captain_store_warehouse(player_idx, g_type)
-
-            elif action == 105:
-                # Hacienda draw
-                self.game.action_hacienda_draw(player_idx)
-
-            elif 120 <= action <= 125:
-                # Mayor Placement (Island) by TileType
-                target_type = TileType(action - 120)
-                idx = -1
-                for i, t in enumerate(p.island_board):
-                    if t.tile_type == target_type and not t.is_occupied:
-                        idx = i
-                        break
-                if idx == -1:
-                    raise ValueError(f"No unoccupied {target_type.name} found on island.")
-                self.game.action_mayor_place_colonist(player_idx, is_city=False, slot_idx=idx)
-
-            elif 140 <= action <= 162:
-                # Mayor Placement (City) by BuildingType
-                target_type = BuildingType(action - 140)
-                idx = -1
-                for i, b in enumerate(p.city_board):
-                    if b.building_type == target_type and b.colonists < BUILDING_DATA[b.building_type][2]:
-                        idx = i
-                        break
-                if idx == -1:
-                    raise ValueError(f"No valid building of type {target_type.name} found in city.")
-                self.game.action_mayor_place_colonist(player_idx, is_city=True, slot_idx=idx)
-
-            elif 93 <= action <= 97:
-                # Craftsman Privilege
-                g_type = Good(action - 93)
-                self.game.action_craftsman(player_idx, privilege_good=g_type)
-
-        except ValueError as e:
-            # An action the mask advertised as legal but the engine rejects is a
-            # bug in this repo, not a game event. It used to be swallowed here:
-            # the actor got -10 and the whole game was terminated, which quietly
-            # corrupted a result instead of reporting a defect (exactly how a
-            # Mayor-phase deadlock went unnoticed in the research code until it
-            # was made loud). Agents cannot trigger this — the harness already
-            # replaces illegal *agent* moves with a random legal one before the
-            # env ever sees them.
-            raise AssertionError(
-                f"valid_action_mask() allowed action {action} but the engine "
-                f"rejected it in phase "
-                f"{self.game.current_phase.name if self.game.current_phase else 'INIT'} "
-                f"for {agent}: {e}"
-            ) from e
+        self._apply_checked(player_idx, action, self._apply_action, player_idx, action)
 
         self._game_step_count += 1
         done = self.game.check_game_end()
@@ -551,7 +528,7 @@ class PuertoRicoEnv(AECEnv):
                     self.game.current_phase if self.game.current_phase is not None else 9
                 )
 
-        # Execute auto-actions (pass-only, forced captain, etc.)
+        # Execute auto-actions (a single legal action, forced Mayor placement)
         while not all(self.terminations.values()) and not all(self.truncations.values()):
             if not self._execute_auto_actions():
                 break
