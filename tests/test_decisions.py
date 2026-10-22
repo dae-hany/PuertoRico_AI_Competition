@@ -98,6 +98,38 @@ def test_hospice_does_not_apply_to_the_hacienda_tile():
     assert not p.island_board[-1].is_occupied
 
 
+@pytest.mark.parametrize("choice, placed", [
+    (0, TileType.SUGAR_PLANTATION),           # a face-up plantation
+    (-1, TileType.QUARRY),                    # a quarry (the settler's privilege)
+    (-2, None),                               # pass: only the hacienda tile is placed
+])
+def test_hospice_colonist_goes_on_the_regular_tile_after_a_hacienda_draw(choice, placed):
+    """Hospice: the colonist goes on "the newly acquired plantation or quarry
+    tile", never on the hacienda's extra tile, which is placed first.
+    """
+    g = _game()
+    p = g.players[0]
+    _occupy(p, BuildingType.HOSPICE)
+    _occupy(p, BuildingType.HACIENDA)
+    g.face_up_plantations = [TileType.SUGAR_PLANTATION]
+    g.current_phase, g.current_player_idx, g.active_role_player = Phase.SETTLER, 0, 0
+    start, supply = len(p.island_board), g.colonists_supply
+
+    g.action_hacienda_draw(0)
+    hacienda_tile = p.island_board[start]
+    g.action_settler(0, tile_choice=choice)
+    if placed is None:
+        assert not g.pending_benefits
+        assert len(p.island_board) == start + 1
+    else:
+        assert g.pending_benefits == [Benefit.HOSPICE]
+        g.resolve_benefit(0, accept=True)
+        assert p.island_board[-1].tile_type == placed
+        assert p.island_board[-1].is_occupied
+        assert g.colonists_supply == supply - 1
+    assert not hacienda_tile.is_occupied
+
+
 def test_hospice_and_university_fall_back_to_the_colonist_ship():
     """Hospice, University: "If there are no more colonists in the colonist
     supply, the player may take one from the colonist ship. If there are also
