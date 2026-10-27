@@ -31,7 +31,7 @@ The final project's 40% splits in two:
 | Part | Weight | What is graded |
 |---|---:|---|
 | Battle results | **20%** | games between student agents, seats swapped: **both the wins and the rank** count |
-| Presentation and report | **20%** | `presentation.pdf` and `writeup.pdf`; final presentation on 3 or 5 December |
+| Presentation and report | **20%** | `presentation.pdf` and `writeup.pdf`; final presentation on 1 or 3 December |
 
 - Only **games between students** count. Each game is a win (1), a draw (½)
   or a loss (0); your **wins** are your wins plus half your draws.
@@ -66,7 +66,7 @@ One zip named **`<student id>_<name>.zip`**, containing:
 | File | |
 |---|---|
 | `writeup.pdf` | 1–2 pages: how your agent works, why you designed it that way, and what you measured yourself |
-| `presentation.pdf` | the slides for your final presentation (3 or 5 December) |
+| `presentation.pdf` | the slides for your final presentation (1 or 3 December) |
 
 ### Your alias
 
@@ -160,7 +160,7 @@ report. See also the "Recommended approach" section of the
 | Ladder 4 (D-1) | Saturday 28 November 2026, entries due 17:00 |
 | ① Code deadline | Sunday 29 November 2026, 23:59 |
 | ② Report and presentation deadline | Monday 30 November 2026, 23:59 |
-| Final presentation | Thursday 3 December or Saturday 5 December 2026 |
+| Final presentation | Tuesday 1 December or Thursday 3 December 2026 |
 
 ### The ladder before the deadline
 
