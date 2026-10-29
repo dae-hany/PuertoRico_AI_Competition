@@ -199,7 +199,10 @@ tests/              pytest suite
   zip and a separate report and presentation zip, and four ladder rounds that
   publish only wins and rank — are
   in [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
-  for students of that course.
+  for students of that course. The course is graded with Python 3.12 and
+  CPU-only PyTorch 2.15, one thread per agent, 32 games at a time; the machine
+  and the details are under
+  [Grading environment](docs/COURSE_CNU_2026.md#grading-environment).
 - **Window.** The competition runs for about three months. The dates of the
   IEEE CoG 2027 edition will be announced here.
 - **Weekly ladder.** During the window the organizer runs every entry received

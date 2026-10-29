@@ -99,7 +99,8 @@ class MyAgent(Agent):
   ```
 
 **금지:** 네트워크 접근, 하위 프로세스 실행, 파일 쓰기, 다른 참가자 코드 읽기,
-실제 게임 상태 변경, 숨겨진 농장 타일 순서 읽기.
+실제 게임 상태 변경, 숨겨진 농장 타일 순서 읽기, 스레드 수 변경([채점 환경](#채점-환경)
+참고).
 
 **허용:** **weight 파일 1개 읽기**(아래 설명 참고), 그리고 Python 표준
 라이브러리, NumPy, PyTorch, 저장소 모듈 사용.
@@ -131,6 +132,51 @@ state = torch.load(os.path.join(HERE, "weights.pt"), map_location="cpu")
 **`[PASS] weight file`**을 출력합니다. 50 MB를 넘는 파일, 두 번째 파일, 작업
 폴더 기준의 경로, 파일 쓰기는 **FAIL**이며, FAIL을 받은 엔트리는 해당 래더
 라운드에서 제외됩니다.
+
+### 채점 환경
+
+중간 래더와 최종 채점은 모두 같은 컴퓨터에서, 아래 환경으로 진행합니다.
+
+| | |
+|---|---|
+| 컴퓨터 | AMD Ryzen Threadripper PRO 5995WX (64코어, 128스레드), 메모리 128 GB, Ubuntu 24.04 LTS |
+| Python | 3.12 |
+| PyTorch | 2.15, **CPU 전용 빌드** (GPU를 사용하지 않습니다) |
+| NumPy | 2.5 |
+
+- **에이전트마다 스레드 1개.** 채점기는
+  `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1`을 설정한
+  상태로 실행되므로, NumPy와 PyTorch는 스레드 1개로 계산합니다
+  (`torch.get_num_threads()`는 1을 반환합니다). **코드에서 스레드 수를 바꾸는
+  행위는 금지합니다**(`torch.set_num_threads`, `torch.set_num_interop_threads`,
+  `threadpoolctl`, Python 코드에서 위 환경변수를 바꾸는 것). 위반하면 다른 규칙
+  위반과 같이 처리합니다. 채점 중에는 32판을 동시에 진행하므로, 한 엔트리가
+  코어를 더 차지하면 다른 학생의 에이전트가 느려지기 때문입니다.
+- **32판 동시 진행.** 각 엔트리는 별도 프로세스(sandbox)에서 실행되며,
+  메모리는 4 GB로 제한되고 프로세스를 시작하는 데에는 30초가 주어집니다.
+  0.1초 제한은 다른 31판이 함께 진행되는 상태에서 이 컴퓨터로 측정한 실제 경과
+  시간입니다. 조교가 측정한 결과, 이 부하에서는 한 수에 걸리는 시간이 컴퓨터가
+  다른 작업을 하지 않을 때보다 약 10% 늘어났습니다. 여러분의 컴퓨터는 채점
+  컴퓨터보다 빠를 수도 있고 느릴 수도 있으므로, 시간에 여유를 남겨 두세요.
+- **weight는 `state_dict`로 저장하세요.** PyTorch 2.6부터 `torch.load`는
+  기본적으로 텐서와 기본 자료형만 불러옵니다(`weights_only=True`).
+  `torch.save(model.state_dict(), path)`로 저장하고, 코드에서 신경망을 다시
+  생성한 뒤 `model.load_state_dict(torch.load(path, map_location="cpu"))`로
+  불러오세요. 모델 객체 전체를 pickle로 저장하면 채점 컴퓨터에서 불러오지 못할
+  수 있습니다.
+
+같은 스레드 설정으로 에이전트의 시간을 측정해 보세요.
+
+```bash
+# Linux / macOS
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1
+# Windows (PowerShell)
+$env:OMP_NUM_THREADS=1; $env:MKL_NUM_THREADS=1; $env:OPENBLAS_NUM_THREADS=1
+python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1
+```
+
+`tools/validate_submission.py`는 이미 이 설정으로 에이전트를 실행합니다.
 
 ## 방법은 자유이지만, RL을 권장합니다
 

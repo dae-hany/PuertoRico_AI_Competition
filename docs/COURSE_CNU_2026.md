@@ -97,8 +97,9 @@ name; the ladder refuses to run until such a clash is fixed.
   ```
 
 **Forbidden:** network access, running subprocesses, writing files, reading
-other entrants' code, changing the real game state, and reading the hidden
-plantation tile order.
+other entrants' code, changing the real game state, reading the hidden
+plantation tile order, and changing the number of threads (see
+[Grading environment](#grading-environment)).
 
 **Allowed:** reading **one weight file** (below), and the
 Python standard library, NumPy, PyTorch and this repository's modules.
@@ -129,6 +130,50 @@ variable and reuse it (the example in COMPETITION_RULES.md shows how).
 with its size. A file over 50 MB, a second file, a path relative to the working
 directory, or writing a file is a **FAIL**, and an entry with a FAIL is left
 out of that ladder round.
+
+### Grading environment
+
+Every ladder round and the final run are played on the same machine, in this
+environment:
+
+| | |
+|---|---|
+| Machine | AMD Ryzen Threadripper PRO 5995WX (64 cores, 128 threads), 128 GB RAM, Ubuntu 24.04 LTS |
+| Python | 3.12 |
+| PyTorch | 2.15, **CPU-only build** (no GPU is used) |
+| NumPy | 2.5 |
+
+- **One thread per agent.** The grader runs with
+  `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1`, so NumPy and
+  PyTorch compute on one thread (`torch.get_num_threads()` returns 1).
+  **Changing the thread count in your code is forbidden**
+  (`torch.set_num_threads`, `torch.set_num_interop_threads`, `threadpoolctl`,
+  or setting these variables from Python) and is treated like any other rule
+  violation: 32 games are played at the same time, and an entry that takes
+  more cores slows the others down.
+- **32 games at a time.** Each entry runs in its own process (the sandbox),
+  with a 4 GB memory cap and 30 s to start. The 0.1 s limit is wall-clock time
+  on this machine while the other 31 games are running; in our measurement
+  this load made a move about 10% slower than on an idle machine. Your own
+  machine is faster or slower than this one, so leave a margin.
+- **Save the weights as a `state_dict`.** Since PyTorch 2.6, `torch.load`
+  loads only tensors and plain containers by default (`weights_only=True`).
+  Save with `torch.save(model.state_dict(), path)`, build the network in your
+  code, and load with `model.load_state_dict(torch.load(path, map_location="cpu"))`.
+  A whole pickled model may fail to load on the grader.
+
+Time your agent under the same thread setting:
+
+```bash
+# Linux / macOS
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1
+# Windows (PowerShell)
+$env:OMP_NUM_THREADS=1; $env:MKL_NUM_THREADS=1; $env:OPENBLAS_NUM_THREADS=1
+python tools/play.py --agent my_agent.py:MyAgent --games 20 --time-limit 0.1
+```
+
+`tools/validate_submission.py` already runs your agent with this setting.
 
 ## Anything goes, but learning is recommended
 
