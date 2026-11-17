@@ -98,8 +98,9 @@ name; the ladder refuses to run until such a clash is fixed.
 
 **Forbidden:** network access, running subprocesses, writing files, reading
 other entrants' code, changing the real game state, reading the hidden
-plantation tile order, and changing the number of threads (see
-[Grading environment](#grading-environment)).
+plantation tile order, changing the number of threads (see
+[Grading environment](#grading-environment)), and carrying information from
+one game to the next (see [No state between games](#no-state-between-games)).
 
 **Allowed:** reading **one weight file** (below), and the
 Python standard library, NumPy, PyTorch and this repository's modules.
@@ -130,6 +131,33 @@ variable and reuse it (the example in COMPETITION_RULES.md shows how).
 with its size. A file over 50 MB, a second file, a path relative to the working
 directory, or writing a file is a **FAIL**, and an entry with a FAIL is left
 out of that ladder round.
+
+### No state between games
+
+A new agent instance is built for every game, and nothing your agent learns in
+one game may reach the next. Whatever a game produces (what you observed, what
+you computed, how the game ended) belongs on the agent instance (`self`) and
+is discarded with it. (Clarified on 17 November 2026.)
+
+- **Allowed:** module-level variables that hold read-only data: the parameters
+  from your weight file, constants, and tables computed in advance. Their
+  values must not change during a game.
+- **Allowed:** the global `random` and `np.random` generators, although their
+  state carries over between games (see
+  [COMPETITION_RULES.md, Determinism and seating](COMPETITION_RULES.md#determinism-and-seating)).
+- **Forbidden:** recording the opponent's actions or a game's result and using
+  it in a later game; keeping a search cache (a transposition table, an
+  evaluation cache) from one game to the next; counting the games played, or
+  otherwise changing behaviour because of earlier games.
+
+A quick test: if your agent would make the same decisions with a fresh Python
+process for every game, apart from randomness and timing, it complies.
+
+How the grader runs the games (whether a process is reused, the order in which
+games are played) is not part of the rules and may change.
+`tools/validate_submission.py` cannot detect this kind of state, so it is
+checked by reading the submitted code, and a violation is treated like any
+other rule violation.
 
 ### Grading environment
 
