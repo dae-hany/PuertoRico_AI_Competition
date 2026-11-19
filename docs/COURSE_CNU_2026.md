@@ -18,7 +18,7 @@ public IEEE CoG edition follow COMPETITION_RULES.md alone.)
 | Track | **2p only** | 2p and 3p |
 | Ranking | **wins and rank** in games between students (a draw is ½ a win) | Elo (2p) / TrueSkill (3p) |
 | Deliverables | **two zips**: code (agent + README + optional weights), then write-up + presentation | agent file (+ optional weight file) |
-| Ladder | **4 rounds** before the deadline; wins and rank only | weekly; standings and replays |
+| Ladder | **4 rounds** before the deadline; results by alias, no code or replays | weekly; standings and replays |
 | Channel | **Chonnam National University LMS** assignment submission page | to be announced |
 
 All times are Korean Standard Time (KST).
@@ -239,8 +239,14 @@ report. See also the "Recommended approach" section of the
 
 - Each round plays the entries submitted to the LMS **by 17:00 that day**
   against each other.
-- Only the **wins and the rank** are published. Submitted code and game
-  replays are **not** published.
+- Each round publishes, by alias: the **rank and the wins**, the
+  **head-to-head wins** of every pair, the **win rate by starting seat** (as
+  the round-1 governor, who starts with Indigo, and as the second player, who
+  starts with Corn), each entry's **timeouts and violations**, and the results
+  against the baselines for reference. (Round 1 published the rank, the wins,
+  the timeouts and the baseline results; the head-to-head wins and the seat
+  split start with round 2.) Submitted code and game replays are **not**
+  published.
 - Every pair plays the public seeds **1–25**, each once in either seating:
   **25 seeds × 2 seatings = 50 games per opponent**. A seed fixes the game's
   random setup, so with the seats swapped each of you plays both sides of the

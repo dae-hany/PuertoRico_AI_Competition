@@ -199,7 +199,7 @@ tests/              pytest suite
   Reinforcement Learning course at Chonnam National University (autumn 2026).
   The course adds its own rules: ranking by wins and rank in games between
   students, a code zip plus a separate zip for the report and presentation, and
-  four ladder rounds that publish only wins and rank. They are in
+  four ladder rounds that publish results by alias but never code or replays. They are in
   [docs/COURSE_CNU_2026.md](docs/COURSE_CNU_2026.md), which takes precedence
   for students of that course. The course is graded with Python 3.12 and
   CPU-only PyTorch 2.15, one thread per agent, 32 games at a time. The machine

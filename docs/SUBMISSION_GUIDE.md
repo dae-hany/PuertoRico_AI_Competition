@@ -176,7 +176,7 @@ file over 50 MB, or a write is a FAIL.
 
 Where and when to submit is announced in the README's *The competition*
 section. (CNU course students submit a zip through the LMS instead, and the
-course publishes only wins and rank, not replays: see
+course publishes results by alias, not code or replays: see
 [COURSE_CNU_2026.md](COURSE_CNU_2026.md).) During the competition window the organizer runs a weekly ladder over
 every entry received so far and publishes the standings and replays under
 `leaderboard/`, so submit early and resubmit whenever you improve.
