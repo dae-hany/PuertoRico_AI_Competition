@@ -285,3 +285,30 @@ def test_private_seeds_are_distinct_avoid_the_public_ones_and_stay_out_of_the_re
     got = cl.read_seeds_file(str(outside))
     assert len(got) == 475 and not set(got) & set(range(1, 26))
     assert "sha256" in r.stdout
+
+
+def test_a_failing_game_is_reported_and_does_not_drop_the_pair(monkeypatch):
+    """One game raising must not discard the pair's other games (they were lost before)."""
+    cl._init_worker({"Random": {"kind": "baseline", "name": "Random"},
+                     "Factory": {"kind": "baseline", "name": "Factory"}}, 0.1)
+    real = cl.play_game
+
+    def flaky(agents, seed=None, **kw):
+        if seed == 2:
+            raise RuntimeError("boom")
+        return real(agents, seed=seed, **kw)
+
+    monkeypatch.setattr(cl, "play_game", flaky)
+    games = [(s, sw) for s in (1, 2) for sw in (False, True)]
+    records, failed = cl.play_pair(("Random", "Factory", games))
+    assert len(records) == 2 and {r["result"]["seed"] for r in records} == {1}
+    assert [(s, sw) for s, sw, _ in failed] == [(2, False), (2, True)]
+    assert all("boom" in why for *_, why in failed)
+
+
+def test_an_incomplete_board_says_so():
+    meta = {"label": "ladder 1", "date": "d", "entries": 2, "seeds": 1,
+            "games_per_pair": 2, "time_limit": 0.1,
+            "games_expected": 10, "games_missing": 3}
+    assert cl.students_markdown([], meta).startswith("**INCOMPLETE")
+    assert "INCOMPLETE" not in cl.students_markdown([], {**meta, "games_missing": 0})

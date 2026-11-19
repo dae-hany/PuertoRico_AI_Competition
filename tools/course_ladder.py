@@ -453,21 +453,89 @@ def _factories(aliases):
 
 
 def play_pair(task):
-    """Play one pair's games in this process; returns per-game records."""
+    """Play one pair's games in this process; ``(records, failures)``.
+
+    A game that raises is listed in ``failures`` as ``(seed, swapped, why)``
+    rather than taking the pair's other games down with it; the caller plays
+    the failed games again (``run_games``).
+    """
     a, b, games = task
-    out = []
-    pool, close = _factories([a, b])
+    out, failed = [], []
+    try:
+        pool, close = _factories([a, b])
+    except Exception as exc:                          # noqa: BLE001
+        why = f"{type(exc).__name__}: {exc}"
+        return out, [(seed, swapped, why) for seed, swapped in games]
     try:
         for seed, swapped in games:
             seats = [b, a] if swapped else [a, b]
             started = time.perf_counter()
-            result = play_game([pool[seats[0]](), pool[seats[1]]()], seed=seed,
-                               time_limit_s=_TIME_LIMIT)
+            try:
+                result = play_game([pool[seats[0]](), pool[seats[1]]()], seed=seed,
+                                   time_limit_s=_TIME_LIMIT)
+            except Exception as exc:                  # noqa: BLE001
+                failed.append((seed, swapped, f"{type(exc).__name__}: {exc}"))
+                continue
             result["elapsed_s"] = round(time.perf_counter() - started, 3)
             out.append({"agents": seats, "result": result})
     finally:
-        close()
-    return out
+        try:
+            close()
+        except Exception:                             # noqa: BLE001
+            pass                                      # the games are already played
+    return out, failed
+
+
+def run_games(tasks, workers, specs, time_limit_s, retries=2):
+    """Play ``tasks`` in a process pool; ``(records, missing)``.
+
+    The progress line counts **played** games only, so it reaches the total
+    only when every game has a result. A game that fails -- it raised, or its
+    worker process died, which breaks the whole pool and fails every pairing
+    still queued -- is played again in a fresh pool, up to ``retries`` more
+    times. ``missing`` lists what still has no result after that:
+    ``(a, b, seed, swapped, why)``, one per game.
+    """
+    total = sum(len(t[2]) for t in tasks)
+    records, done = [], 0
+    started = time.perf_counter()
+    pending, missing = list(tasks), []
+    for attempt in range(retries + 1):
+        if not pending:
+            break
+        if attempt:
+            n = sum(len(t[2]) for t in pending)
+            print(f"\nretrying {n} failed games in {len(pending)} pairings "
+                  f"(attempt {attempt + 1} of {retries + 1}) in a fresh pool...", flush=True)
+        failed_now = []
+        with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
+                                 initargs=(specs, time_limit_s)) as pool:
+            futures = {pool.submit(play_pair, t): t for t in pending}
+            for fut in as_completed(futures):
+                a, b, games = futures[fut]
+                try:
+                    got, failed = fut.result()
+                except Exception as exc:              # the pool broke, or pickling failed
+                    why = f"{type(exc).__name__}: {exc}"
+                    got, failed = [], [(s, sw, why) for s, sw in games]
+                records.extend(got)
+                done += len(got)
+                if failed:
+                    print(f"  ERROR {a} vs {b}: {len(failed)} of {len(games)} games "
+                          f"failed ({failed[0][2]})", flush=True)
+                    failed_now.extend((a, b, s, sw, why) for s, sw, why in failed)
+                elapsed = time.perf_counter() - started
+                rate = done / elapsed if elapsed else 0
+                left = (total - done) / rate / 60 if rate else 0
+                note = f", {len(failed_now)} failed (retried at the end)" if failed_now else ""
+                print(f"  {done}/{total} games played{note}, {elapsed / 60:.1f} min elapsed, "
+                      f"~{left:.1f} min left", flush=True)
+        regroup = {}
+        for a, b, s, sw, _ in failed_now:
+            regroup.setdefault((a, b), []).append((s, sw))
+        pending = [(a, b, g) for (a, b), g in regroup.items()]
+        missing = failed_now
+    return records, missing
 
 
 # -------------------------------------------------------------------- boards
@@ -569,9 +637,17 @@ def fmt_wins(x):
     return f"{x:g}"
 
 
+def incomplete_banner(meta):
+    """A warning line for a board some of whose games have no result, else ''."""
+    if not meta.get("games_missing"):
+        return ""
+    return (f"**INCOMPLETE, do not publish: {meta['games_missing']} of "
+            f"{meta['games_expected']} games have no result (see missing_games.csv).**\n\n")
+
+
 def students_markdown(rows, meta):
     """The published board: rank and wins only, keyed by alias."""
-    head = (f"# {meta['label']} -- {meta['date']} -- 2p track\n\n"
+    head = incomplete_banner(meta) + (f"# {meta['label']} -- {meta['date']} -- 2p track\n\n"
             f"{meta['entries']} entries. Every pair played {meta['seeds']} seeds x 2 "
             f"seatings = {meta['games_per_pair']} games, {meta['time_limit']:g} s per "
             "decision. Only games between entries count; a draw counts as half a win. "
@@ -586,7 +662,8 @@ def students_markdown(rows, meta):
 
 def baselines_markdown(rows, table, baselines, meta):
     """The reference board: each entry's wins against each baseline."""
-    head = (f"# {meta['label']} -- {meta['date']} -- results against the baselines\n\n"
+    head = incomplete_banner(meta) + (
+            f"# {meta['label']} -- {meta['date']} -- results against the baselines\n\n"
             "For reference only: these games do not affect the rank. Each cell is "
             "wins / games (a draw counts as half a win), "
             f"{meta['seeds']} seeds x 2 seatings per baseline.\n\n")
@@ -645,6 +722,9 @@ def main() -> None:
     ap.add_argument("--validate-only", action="store_true")
     ap.add_argument("--no-games", action="store_true",
                     help="do not save replays (they are organizer-only either way)")
+    ap.add_argument("--retries", type=int, default=2,
+                    help="times to play a failed game again in a fresh pool (default 2); "
+                         "games still failing are listed and the boards marked INCOMPLETE")
     ap.add_argument("--dry-run", action="store_true", help="show the plan and stop")
     args = ap.parse_args()
 
@@ -765,22 +845,8 @@ def main() -> None:
 
     print(f"\nplaying {total_games} games with {workers} concurrent...")
     started = time.perf_counter()
-    records, done = [], 0
-    with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
-                             initargs=(specs, args.time_limit)) as pool:
-        futures = {pool.submit(play_pair, t): t for t in tasks}
-        for fut in as_completed(futures):
-            a, b, games = futures[fut]
-            try:
-                records.extend(fut.result())
-            except Exception as exc:                  # one pairing must not sink the round
-                print(f"  ERROR {a} vs {b}: {type(exc).__name__}: {exc}")
-            done += len(games)
-            elapsed = time.perf_counter() - started
-            rate = done / elapsed if elapsed else 0
-            left = (total_games - done) / rate / 60 if rate else 0
-            print(f"  {done}/{total_games} games, {elapsed / 60:.1f} min elapsed, "
-                  f"~{left:.1f} min left", flush=True)
+    records, missing = run_games(tasks, workers, specs, args.time_limit,
+                                 retries=args.retries)
 
     kinds = {e["alias"]: "student" for e in entries}
     kinds.update({b: "baseline" for b in baselines})
@@ -790,8 +856,14 @@ def main() -> None:
     meta = {"label": args.label, "date": date, "entries": len(entries),
             "baselines": baselines, "games": len(records), "seeds": len(seeds),
             "games_per_pair": games_per_pair, "seed_list_sha256": seeds_digest(seeds),
+            "games_expected": total_games, "games_missing": len(missing),
             "time_limit": args.time_limit,
             "wall_minutes": round((time.perf_counter() - started) / 60, 1)}
+    if missing:
+        write_csv(os.path.join(out_dir, "missing_games.csv"),
+                  [{"a": a, "b": b, "seed": s, "swapped": sw, "error": why}
+                   for a, b, s, sw, why in missing],
+                  ["a", "b", "seed", "swapped", "error"])
 
     md = students_markdown(rows, meta)
     with open(os.path.join(out_dir, "board_students.md"), "w", encoding="utf-8") as f:
@@ -829,10 +901,22 @@ def main() -> None:
             print(f"  {r['alias']:<20} timeouts {r['timeouts']}, illegal "
                   f"{r['illegal']}, tampered {r['tampered']}")
     published = "board_students.md" + (" and board_baselines.md" if baselines else "")
-    print(f"\npublish: {out_dir}/{published} (rank and wins only)")
+    if missing:
+        pairs = sorted({(a, b) for a, b, *_ in missing})
+        print(f"\nINCOMPLETE: {len(missing)} of {total_games} games have no result after "
+              f"{args.retries} retries, in {len(pairs)} pairings:")
+        for a, b in pairs:
+            n = sum(1 for x in missing if (x[0], x[1]) == (a, b))
+            print(f"  {a} vs {b}: {n} games")
+        print(f"the boards are marked INCOMPLETE; do not publish them. Details: "
+              f"{out_dir}/missing_games.csv")
+    else:
+        print(f"\npublish: {out_dir}/{published} (rank and wins only)")
     print(f"keep:    {out_dir}/board_organizer.csv (roster, W/L/D, Elo), validation.txt, "
           f"summary.json and games/ (replays are not published)")
     print(f"took {meta['wall_minutes']} min")
+    if missing:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
