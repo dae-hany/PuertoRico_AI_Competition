@@ -12,9 +12,10 @@ than the competition's Elo board (docs/COURSE_CNU_2026.md). It differs from
    same starts from both sides;
 3. games are played **in parallel** (one process per concurrent game), because
    a cohort round-robin is quadratic and a single process is too slow;
-4. the published board shows **only the rank and the wins** (a draw is half a
-   win); the organizer board adds the roster, W/L/D, Elo, timeouts and
-   violations, and the replays stay with the organizer;
+4. the published boards are keyed by alias: the rank and the wins (a draw is
+   half a win), the head-to-head wins of every pair, the win rate by starting
+   seat, and each entry's timeouts and violations; the organizer board adds
+   the roster, W/L/D and Elo, and the replays stay with the organizer;
 5. the ranking uses **student-vs-student games only**. Baselines are played on
    the same seeds as a reference and reported on a separate board.
 
@@ -51,8 +52,13 @@ Writes, per run:
 
     <out>/<date>/board_students.md    publish this: rank and wins, aliases only
     <out>/<date>/board_students.csv   the same as a table
+    <out>/<date>/board_matrix.md      publish: head-to-head wins of every pair
+    <out>/<date>/board_seats.md       publish: win rate as round-1 governor
+                                      (Indigo) and as the second player (Corn)
+    <out>/<date>/board_violations.md  publish: timeouts / illegal / tampered
     <out>/<date>/board_baselines.md   publish this too: results against the
                                       baselines, for reference only
+    <out>/<date>/board_matrix.csv, board_seats.csv   the same as tables
     <out>/<date>/board_organizer.csv  keep this (roster, W/L/D, Elo, timeouts)
     <out>/<date>/validation.txt       keep: per-entry PASS / WARN / FAIL
     <out>/<date>/intake.csv           keep: what each zip contained (with --zips)
@@ -676,6 +682,118 @@ def baselines_markdown(rows, table, baselines, meta):
     return head + "\n".join(lines)
 
 
+def first_player(result):
+    """The seat that was governor in round 1 (in 2p it starts with Indigo).
+
+    ``play_game`` records it; for an older result, the first decision of a
+    game is the governor's role choice, so its seat is the same answer.
+    """
+    if "first_player" in result:
+        return result["first_player"]
+    return result["actions"][0][0]
+
+
+def head_to_head(records, aliases):
+    """``{a: {b: wins of a against b}}`` over games between entries (a draw is half)."""
+    known = set(aliases)
+    out = {a: {b: 0.0 for b in aliases if b != a} for a in aliases}
+    for rec in records:
+        seats = rec["agents"]
+        if not all(s in known for s in seats):
+            continue
+        winners = rec["result"]["winners"]
+        for i, name in enumerate(seats):
+            if i in winners:
+                out[name][seats[1 - i]] += 1.0 / len(winners)
+    return out
+
+
+def seat_split(records, aliases):
+    """Per entry ``{"first": [wins, games], "second": [wins, games]}`` over games
+    between entries, by whether it was the round-1 governor (Indigo in 2p) or
+    the other player (Corn). Every pair plays each seed from both seats, so
+    each entry plays the same opponents and seeds from both sides."""
+    known = set(aliases)
+    out = {a: {"first": [0.0, 0], "second": [0.0, 0]} for a in aliases}
+    for rec in records:
+        seats = rec["agents"]
+        if not all(s in known for s in seats):
+            continue
+        res = rec["result"]
+        gov = first_player(res)
+        for i, name in enumerate(seats):
+            cell = out[name]["first" if i == gov else "second"]
+            cell[1] += 1
+            if i in res["winners"]:
+                cell[0] += 1.0 / len(res["winners"])
+    return out
+
+
+def pct(w, n):
+    return f"{100 * w / n:.1f}%" if n else "-"
+
+
+def matrix_markdown(rows, h2h, meta):
+    """The head-to-head board: row entry's wins against the column entry."""
+    n = meta["games_per_pair"]
+    head = incomplete_banner(meta) + (
+        f"# {meta['label']} -- {meta['date']} -- head to head\n\n"
+        f"Each cell is the row entry's wins against the column entry, out of {n} "
+        "games (a draw counts as half a win). Columns are numbered by rank, as the "
+        "rows are. The two cells of a pair add up to the games they played.\n\n")
+    lines = ["| Rank | Agent | " + " | ".join(str(i + 1) for i in range(len(rows))) + " | Wins |",
+             "|-----:|-------|" + "---:|" * (len(rows) + 1)]
+    for i, r in enumerate(rows):
+        cells = ["-" if i == j else fmt_wins(h2h[r["alias"]][c["alias"]])
+                 for j, c in enumerate(rows)]
+        lines.append(f"| {r['rank']} | {r['alias']} | " + " | ".join(cells)
+                     + f" | {fmt_wins(r['points'])} |")
+    return head + "\n".join(lines)
+
+
+def seats_markdown(rows, split, meta):
+    """Win rate by starting seat: round-1 governor (Indigo) or second player (Corn)."""
+    fw = sum(split[r["alias"]]["first"][0] for r in rows)
+    fn = sum(split[r["alias"]]["first"][1] for r in rows)
+    head = incomplete_banner(meta) + (
+        f"# {meta['label']} -- {meta['date']} -- win rate by starting seat\n\n"
+        "Games between entries only. *First* is the round-1 governor, who starts "
+        "with an Indigo plantation; *second* starts with Corn. Every pair plays each "
+        "seed from both seats, so an entry meets the same opponents on the same "
+        "seeds from both sides. Over all these games the first player won "
+        f"{pct(fw, fn)}.\n\n")
+    lines = ["| Rank | Agent | First (Indigo) | Second (Corn) | Difference |",
+             "|-----:|-------|-----:|-----:|-----:|"]
+    for r in rows:
+        (w1, n1), (w2, n2) = split[r["alias"]]["first"], split[r["alias"]]["second"]
+        diff = (f"{100 * (w1 / n1 - w2 / n2):+.1f} pp" if n1 and n2 else "-")
+        lines.append(f"| {r['rank']} | {r['alias']} | {fmt_wins(w1)} / {n1} ({pct(w1, n1)}) "
+                     f"| {fmt_wins(w2)} / {n2} ({pct(w2, n2)}) | {diff} |")
+    return head + "\n".join(lines)
+
+
+def violations_markdown(rows, meta):
+    """Moves replaced by a random legal move, per entry, over all its games."""
+    flagged = [r for r in rows if r["timeouts"] or r["illegal"] or r["tampered"]]
+    head = incomplete_banner(meta) + (
+        f"# {meta['label']} -- {meta['date']} -- timeouts and violations\n\n"
+        f"Counted over every game an entry played, against entries and baselines. "
+        f"A decision over {meta['time_limit']:g} s, an illegal action or an "
+        "exception is replaced by a random legal action.\n\n")
+    if not flagged:
+        return head + "No entry had a timeout, an illegal action or a tampering event."
+    lines = ["| Agent | Timeouts | Illegal | Tampered |", "|-------|-----:|-----:|-----:|"]
+    for r in flagged:
+        lines.append(f"| {r['alias']} | {r['timeouts']} | {r['illegal']} | {r['tampered']} |")
+    clean = len(rows) - len(flagged)
+    return head + "\n".join(lines) + f"\n\nThe other {clean} entries had none."
+
+
+def write_text(path, text):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text + "\n")
+
+
 def write_csv(path, rows, fields):
     with open(path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
@@ -875,6 +993,24 @@ def main() -> None:
         table = vs_baselines(records, entries, baselines)
         with open(os.path.join(out_dir, "board_baselines.md"), "w", encoding="utf-8") as f:
             f.write(baselines_markdown(rows, table, baselines, meta) + "\n")
+    aliases = [r["alias"] for r in rows]                     # rank order
+    h2h = head_to_head(records, aliases)
+    write_text(os.path.join(out_dir, "board_matrix.md"), matrix_markdown(rows, h2h, meta))
+    write_csv(os.path.join(out_dir, "board_matrix.csv"),
+              [{"rank": r["rank"], "alias": r["alias"],
+                **{c: ("" if c == r["alias"] else fmt_wins(h2h[r["alias"]][c])) for c in aliases},
+                "wins": fmt_wins(r["points"])} for r in rows],
+              ["rank", "alias", *aliases, "wins"])
+    split = seat_split(records, aliases)
+    write_text(os.path.join(out_dir, "board_seats.md"), seats_markdown(rows, split, meta))
+    write_csv(os.path.join(out_dir, "board_seats.csv"),
+              [{"rank": r["rank"], "alias": r["alias"],
+                "first_wins": fmt_wins(split[r["alias"]]["first"][0]),
+                "first_games": split[r["alias"]]["first"][1],
+                "second_wins": fmt_wins(split[r["alias"]]["second"][0]),
+                "second_games": split[r["alias"]]["second"][1]} for r in rows],
+              ["rank", "alias", "first_wins", "first_games", "second_wins", "second_games"])
+    write_text(os.path.join(out_dir, "board_violations.md"), violations_markdown(rows, meta))
     write_csv(os.path.join(out_dir, "board_organizer.csv"), rows,
               ["rank", "student_id", "student_name", "file", "alias", "points", "wins",
                "losses", "draws", "games", "win_rate", "ci_low", "ci_high", "elo",
@@ -900,7 +1036,8 @@ def main() -> None:
         for r in flagged:
             print(f"  {r['alias']:<20} timeouts {r['timeouts']}, illegal "
                   f"{r['illegal']}, tampered {r['tampered']}")
-    published = "board_students.md" + (" and board_baselines.md" if baselines else "")
+    published = ", ".join(["board_students.md", "board_matrix.md", "board_seats.md",
+                           "board_violations.md"] + (["board_baselines.md"] if baselines else []))
     if missing:
         pairs = sorted({(a, b) for a, b, *_ in missing})
         print(f"\nINCOMPLETE: {len(missing)} of {total_games} games have no result after "
@@ -911,7 +1048,7 @@ def main() -> None:
         print(f"the boards are marked INCOMPLETE; do not publish them. Details: "
               f"{out_dir}/missing_games.csv")
     else:
-        print(f"\npublish: {out_dir}/{published} (rank and wins only)")
+        print(f"\npublish: {published} in {out_dir} (aliases only)")
     print(f"keep:    {out_dir}/board_organizer.csv (roster, W/L/D, Elo), validation.txt, "
           f"summary.json and games/ (replays are not published)")
     print(f"took {meta['wall_minutes']} min")

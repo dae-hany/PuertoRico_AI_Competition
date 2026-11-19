@@ -139,13 +139,15 @@ def play_game(agents, seed: int = None, time_limit_s=TIME_LIMIT_S,
     Returns:
         dict with ``scores``, ``tiebreak``, ``ranks`` (0 = best), ``winners``,
         ``steps``, ``timeouts``, ``illegal``, ``tampered`` (per-player counts),
-        ``truncated``, ``seed``, and ``actions`` — every applied decision as
+        ``truncated``, ``seed``, ``first_player`` (the round-1 governor's
+        seat), and ``actions`` — every applied decision as
         ``(seat, action)`` pairs, so the game can be stored and replayed
         (see :mod:`puerto_rico.records`).
     """
     n = len(agents)
     limits = seat_time_limits(agents, time_limit_s, baseline_time_limit_s)
     env = make_env(seed=seed, num_players=n)
+    first_player = env.unwrapped.game.governor_idx   # round-1 governor (Indigo in 2p)
     for agent in agents:
         try:
             # One model per seat: a single shared instance let any agent perturb
@@ -224,5 +226,6 @@ def play_game(agents, seed: int = None, time_limit_s=TIME_LIMIT_S,
         "illegal": illegal,
         "tampered": tampered,
         "truncated": truncated,
+        "first_player": first_player,
         "actions": actions,
     }

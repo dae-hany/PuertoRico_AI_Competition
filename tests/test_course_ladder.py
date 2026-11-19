@@ -312,3 +312,35 @@ def test_an_incomplete_board_says_so():
             "games_expected": 10, "games_missing": 3}
     assert cl.students_markdown([], meta).startswith("**INCOMPLETE")
     assert "INCOMPLETE" not in cl.students_markdown([], {**meta, "games_missing": 0})
+
+
+def _rec(seats, winners, first):
+    return {"agents": list(seats), "result": {"winners": winners, "first_player": first}}
+
+
+def test_head_to_head_counts_wins_per_pair_and_ignores_baseline_games():
+    recs = [_rec(("A", "B"), [0], 0), _rec(("B", "A"), [0], 1),
+            _rec(("A", "C"), [0, 1], 0), _rec(("A", "Random"), [0], 0)]
+    h2h = cl.head_to_head(recs, ["A", "B", "C"])
+    assert h2h["A"] == {"B": 1.0, "C": 0.5}
+    assert h2h["B"] == {"A": 1.0, "C": 0.0}
+    assert h2h["C"]["A"] == 0.5
+
+
+def test_seat_split_uses_the_round_one_governor():
+    recs = [_rec(("A", "B"), [0], 0),           # A governor, A wins
+            _rec(("B", "A"), [1], 0),           # B governor, A wins as second
+            _rec(("A", "B"), [0, 1], 1)]        # B governor, draw
+    split = cl.seat_split(recs, ["A", "B"])
+    assert split["A"] == {"first": [1.0, 1], "second": [1.5, 2]}
+    assert split["B"] == {"first": [0.5, 2], "second": [0.0, 1]}
+    # an older result without the field falls back to the first decision's seat
+    assert cl.first_player({"actions": [(1, 3), (0, 7)]}) == 1
+
+
+@pytest.mark.parametrize("n", [2, 3])
+def test_play_game_records_the_first_player(n):
+    from agents.random_agent import RandomAgent
+    for seed in (1, 3, 8):
+        res = cl.play_game([RandomAgent() for _ in range(n)], seed=seed)
+        assert res["first_player"] == res["actions"][0][0]
